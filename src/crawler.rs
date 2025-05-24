@@ -1,8 +1,12 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
+use log2::{debug, trace};
 // Crawler Logic
 use url::Url;
+use reqwest::Client;
 
+use anyhow::{Result, anyhow};
+use scraper::{Html, Selector};
 const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
 
 /// Configuration of current state of the crawler
@@ -22,9 +26,16 @@ pub struct Link {
 pub type LinkID = usize;
 // Arc for simultaneos access by multiple threads
 pub type CrawlerStateRef = Arc<CrawlerState>;
+
 pub struct CrawlerConfig{
+
+    /// starting point of scraping
     pub starting_url: Url,
+    /// if should scrape foreign hosts
+    pub scraping_foreign_hosts: bool,
 }
+
+
 /// If `path` is full_url -> returns it
 /// if relative constructs full url  by merging with `root_url`
 /// If there is trailing slash it removes it
@@ -46,8 +57,58 @@ fn construct_url(path: &str, root_url: Url) -> Result<Url, url::ParseError> {
     if let Some(frag) = url.fragment().map(|s| s.to_string()) {
         url.set_fragment(Some(frag.trim_end_matches('/')));
     }
-
+    trace!("Constructed link URL: {}", url);
     Ok(url)
+
+}
+
+
+
+
+
+/// Reads one link from `link_to_crawl_queue` and scrapes all links from there to the end of that queue
+async fn scrape_page(url: Url, client: &Client, config: CrawlerConfig) -> Result<Vec<Url>> {
+    trace!("Scraping page: {}", url);
+
+    let response = client
+        .get(url.clone())
+        .timeout(std::time::Duration::from_secs(LINK_REQUEST_TIMEOUT_SEC))
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(anyhow!("Failed to fetch page: {}", response.status()));
+    }
+
+    let html = response.text().await?;
+    let document = Html::parse_document(&html);
+    let selector = Selector::parse("a").map_err(|e| anyhow!("Failed to parse selector: {}", e))?;
+
+    let mut found_urls = Vec::new();
+
+    for element in document.select(&selector) {
+        if let Some(href) = element.value().attr("href") {
+            if let Ok(parsed_url) = construct_url(href, url.clone()) {
+
+
+                // Only collect URLs from the same host is `CrawlerConfig.scraping_foreign_hosts==true'
+                if config.scraping_foreign_hosts == true {
+
+                    found_urls.push(parsed_url);
+                }
+                else if  parsed_url.host() == url.host() {
+                    found_urls.push(parsed_url);
+                }
+                else {
+                    // inform about skipping a link
+                    debug!("Skipped scraping {parsed_url} because its foreign host");
+                }
+            }
+        }
+    }
+
+    trace!("Found {} urls on page {}", found_urls.len(), url);
+    Ok(found_urls)
 }
 
 
@@ -55,9 +116,11 @@ fn construct_url(path: &str, root_url: Url) -> Result<Url, url::ParseError> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
     use url::Url;
-    use crate::crawler::construct_url;
-
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, ResponseTemplate};
+    use crate::crawler::{construct_url, scrape_page, CrawlerConfig, LINK_REQUEST_TIMEOUT_SEC};
 
     // tests for construct_url start here
     #[test]
@@ -75,7 +138,7 @@ mod tests {
         // for the path arg we have relative path
         //let relative_path = Url::parse("/some/relative/path")?;
         let relative_path =  "/some/relative/path";
-        let result_url = construct_url(relative_path.clone(), root_url )?;
+        let result_url = construct_url(relative_path, root_url )?;
         let expected_url = Url::parse("https://groq.xyz/some/relative/path")?;
         assert_eq!(result_url, expected_url);
         Ok(())
@@ -131,4 +194,101 @@ mod tests {
     }
     // tests for construct_url end here
 
+    // tests for `scrape page` start here
+
+    #[tokio::test]
+    async fn test_scrape_empty_page() -> Result<(), Box<dyn std::error::Error>> {
+        let client = reqwest::Client::new();
+        //let url = Url::parse("https://example.com/empty")?;
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false };
+
+
+        let mock_server = wiremock::MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/empty"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(""))
+            .mount(&mock_server)
+            .await;
+        let url = Url::parse(&format!("{}/empty", &mock_server.uri()))?;
+        let result = scrape_page(url, &client, config).await;
+        assert_eq!(result?, Vec::<Url>::new());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_scrape_page_with_links() -> Result<(), Box<dyn std::error::Error>> {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        use url::Url;
+
+        let client = reqwest::Client::new();
+        let mock_server = MockServer::start().await;
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false };
+
+        // Setup mock HTML page
+        Mock::given(method("GET"))
+            .and(path("/with-links"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(r#"
+            <html>
+                <body>
+                    <a href="/link1">Link 1</a>
+                    <a href="https://example.com/link2">Link 2</a>
+                    <a href="../link3">Link 3</a>
+                </body>
+            </html>
+        "#))
+            .mount(&mock_server)
+            .await;
+
+        let url = Url::parse(&format!("{}/with-links", &mock_server.uri()))?;
+        let result = scrape_page(url.clone(), &client, config).await?;
+
+        let expected = vec![
+            construct_url("link1", (&mock_server.uri()).parse().unwrap())?,
+            construct_url("../link3", (&mock_server.uri()).parse().unwrap())?,
+        ];
+
+        assert_eq!(result, expected);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_scrape_page_404() -> Result<(), Box<dyn std::error::Error>> {
+        let client = reqwest::Client::new();
+        let url = Url::parse("https://example.com/not-found")?;
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false };
+        let mock_server = wiremock::MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/not-found"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&mock_server)
+            .await;
+
+        let result = scrape_page(url, &client, config).await;
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_scrape_page_timeout() -> Result<(), Box<dyn std::error::Error>> {
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false };
+        let client = reqwest::Client::new();
+        let url = Url::parse("https://example.com/timeout")?;
+
+        let mock_server = wiremock::MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/timeout"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(LINK_REQUEST_TIMEOUT_SEC + 1)))
+            .mount(&mock_server)
+            .await;
+
+        let result = scrape_page(url, &client, config).await;
+        assert!(result.is_err());
+        Ok(())
+    }
 }
+    // tests for `scrape page` end here
+
+
+
