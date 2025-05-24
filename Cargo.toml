@@ -1,0 +1,8 @@
+[package]
+name = "WikiRacer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log2 = "0.2.1"
+url = "2.5.4"

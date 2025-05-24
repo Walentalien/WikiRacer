@@ -1,0 +1,6 @@
+[2025-05-23 14:15:22.355] [INFO] [WikiRacer:17] logging Initialized
+[2025-05-23 14:15:22.355] [INFO] [WikiRacer:21] arg: target/debug/WikiRacer
+[2025-05-23 14:15:34.189] [INFO] [WikiRacer:17] logging Initialized
+[2025-05-23 14:15:34.189] [INFO] [WikiRacer:21] arg: target/debug/WikiRacer
+[2025-05-23 14:15:34.189] [INFO] [WikiRacer:21] arg: sdsd
+[2025-05-23 14:15:34.189] [INFO] [WikiRacer:21] arg: sdds
