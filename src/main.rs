@@ -5,7 +5,6 @@ use log2::*;
 
 use anyhow::Result;
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _log2 = log2::open("log/log.txt")
@@ -44,8 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match crawler::crawl(state.clone(), config).await {
             Ok(_) => {
-                let final_count = state.links_crawled_count;
-                info!("Crawling completed successfully. Total links found: {}", final_count);
+                let final_count = state.links_crawled_count.load(std::sync::atomic::Ordering::Relaxed);                info!("Crawling completed successfully. Total links found: {}", final_count);
             }
             Err(e) => {
                 error!("Crawling failed: {}", e);

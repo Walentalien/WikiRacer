@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::fs;
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::AtomicUsize;
 use log2::{debug, info, trace};
 use url::Url;
 use reqwest::Client;
@@ -12,7 +13,7 @@ const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
 
 /// Configuration of current state of the crawler
 pub struct CrawlerState {
-    pub links_crawled_count: usize,
+    pub links_crawled_count: AtomicUsize,
     pub link_to_crawl_queue: RwLock<VecDeque<(Url, usize)>>, // (url, depth)
     pub links_graph: RwLock<Vec<Link>>,
     pub visited_urls: RwLock<std::collections::HashSet<Url>>,
@@ -84,7 +85,7 @@ impl CrawlerState {
         queue.push_back((starting_url, 0)); // Start at depth 0
 
         Self {
-            links_crawled_count: 0,
+            links_crawled_count: AtomicUsize::new(0),
             link_to_crawl_queue: RwLock::new(queue),
             links_graph: RwLock::new(Vec::new()),
             visited_urls: RwLock::new(std::collections::HashSet::new()),
@@ -226,7 +227,8 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                     }
 
                     // Check if we've reached max URLs
-                    if state.links_crawled_count >= config.max_urls {
+                    let current_count = state.links_crawled_count.load(Ordering::Relaxed);
+                    if current_count >= config.max_urls {
                         info!("Worker {}: Max URLs reached", worker_id);
                         stop_flag.store(true, Ordering::Relaxed);
                         break;
@@ -245,8 +247,7 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                                 }
                             }
 
-                            // Update crawled count
-                            // Note: This should be atomic in a real implementation
+                            state.links_crawled_count.fetch_add(1, Ordering::Relaxed);
 
                             // Add delay to be respectful to servers
                             if config.request_delay_ms > 0 {
@@ -286,7 +287,7 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
         handle.await.map_err(|e| anyhow!("Worker thread panicked: {}", e))?;
     }
 
-    info!("Crawling completed. Total URLs processed: {}", crawler_state_ref.links_crawled_count);
+    info!("Crawling completed. Total URLs processed: {}", crawler_state_ref.links_crawled_count.load(Ordering::Relaxed));
     Ok(())
 }
 
