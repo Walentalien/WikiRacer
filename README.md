@@ -12,7 +12,11 @@ Find Shortest Path Between Two Links on Wikipedia
 
 
 TODO:
+1. Crawl function
+2. Data Structures to store scraped data
 Argument Parsing 
 Pretty Print Args
 GUI for this crawler
 start using anychow
+
+Creating graph visualization: https://doc.arcgis.com/en/insights/latest/create/link-chart.htm

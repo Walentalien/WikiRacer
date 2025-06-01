@@ -1,4 +1,5 @@
 mod crawler;
+mod link_graph;
 
 use log2::*;
 

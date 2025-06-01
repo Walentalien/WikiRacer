@@ -1,12 +1,13 @@
 use std::collections::VecDeque;
+use std::fs;
 use std::sync::{Arc, RwLock};
-use log2::{debug, trace};
-// Crawler Logic
+use log2::{debug, info, trace};
 use url::Url;
 use reqwest::Client;
-
 use anyhow::{Result, anyhow};
 use scraper::{Html, Selector};
+use serde::Serialize;
+
 const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
 
 /// Configuration of current state of the crawler
@@ -15,7 +16,7 @@ pub struct CrawlerState {
     pub link_to_crawl_queue: RwLock<VecDeque<Url>>,
     pub links_graph: RwLock<Vec<Link>>
 }
-
+#[derive(Serialize)]
 pub struct Link {
     pub id: LinkID,
     pub url: String,
@@ -24,7 +25,7 @@ pub struct Link {
 }
 
 pub type LinkID = usize;
-// Arc for simultaneos access by multiple threads
+// Arc for simultaneous access by multiple threads
 pub type CrawlerStateRef = Arc<CrawlerState>;
 
 pub struct CrawlerConfig{
@@ -33,8 +34,10 @@ pub struct CrawlerConfig{
     pub starting_url: Url,
     /// if should scrape foreign hosts
     pub scraping_foreign_hosts: bool,
+    /// max urls to scrape
+    pub max_urls: usize,
 }
-
+type CrawlerConfigRef = Arc<CrawlerConfig>;
 
 /// If `path` is full_url -> returns it
 /// if relative constructs full url  by merging with `root_url`
@@ -61,10 +64,6 @@ fn construct_url(path: &str, root_url: Url) -> Result<Url, url::ParseError> {
     Ok(url)
 
 }
-
-
-
-
 
 /// Reads one link from `link_to_crawl_queue` and scrapes all links from there to the end of that queue
 async fn scrape_page(url: Url, client: &Client, config: CrawlerConfig) -> Result<Vec<Url>> {
@@ -112,7 +111,19 @@ async fn scrape_page(url: Url, client: &Client, config: CrawlerConfig) -> Result
 }
 
 
+pub fn crawl(crawler_state_ref: CrawlerStateRef,
+            crawler_cfg_ref: CrawlerConfigRef,){
+    let client = Client::new();
 
+    'crawler: loop{
+        let number_of_links_scraped = crawler_state_ref.links_crawled_count;
+        if number_of_links_scraped > crawler_cfg_ref.max_urls {
+            info!("Max links capasity reached");
+            break 'crawler;
+        }
+
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -200,7 +211,7 @@ mod tests {
     async fn test_scrape_empty_page() -> Result<(), Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
         //let url = Url::parse("https://example.com/empty")?;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false };
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0 };
 
 
         let mock_server = wiremock::MockServer::start().await;
@@ -223,7 +234,7 @@ mod tests {
 
         let client = reqwest::Client::new();
         let mock_server = MockServer::start().await;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false };
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0 };
 
         // Setup mock HTML page
         Mock::given(method("GET"))
@@ -257,7 +268,7 @@ mod tests {
     async fn test_scrape_page_404() -> Result<(), Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
         let url = Url::parse("https://example.com/not-found")?;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false };
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0 };
         let mock_server = wiremock::MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/not-found"))
@@ -272,7 +283,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_scrape_page_timeout() -> Result<(), Box<dyn std::error::Error>> {
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false };
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0 };
         let client = reqwest::Client::new();
         let url = Url::parse("https://example.com/timeout")?;
 
