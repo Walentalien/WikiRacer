@@ -1,5 +1,6 @@
 mod crawler;
 mod link_graph;
+mod pathfinder;
 
 use log2::*;
 
@@ -26,33 +27,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
 
-    if args.len() > 1 {
+    if args.len() >= 3 {
         let start_url = url::Url::parse(&args[1])?;
+        let target_url = url::Url::parse(&args[2])?;
 
         let config = std::sync::Arc::new(
             crawler::CrawlerConfig::new(start_url.clone())
-                .with_max_urls(100)
-                .with_max_depth(2)
+                .with_max_urls(500)
+                .with_max_depth(4)
                 .with_thread_count(4)
                 .with_request_delay(200)
         );
 
-        let state = std::sync::Arc::new(crawler::CrawlerState::new(start_url));
+        let state = std::sync::Arc::new(crawler::CrawlerState::new(start_url.clone()));
 
         info!("Starting crawler with {} threads, max {} URLs, max depth {}",
               config.thread_count, config.max_urls, config.max_depth);
+        info!("Finding path from {} to {}", start_url, target_url);
 
         match crawler::crawl(state.clone(), config).await {
             Ok(_) => {
-                let final_count = state.links_crawled_count.load(std::sync::atomic::Ordering::Relaxed);                info!("Crawling completed successfully. Total links found: {}", final_count);
+                let final_count = state.links_crawled_count.load(std::sync::atomic::Ordering::Relaxed);
+                info!("Crawling completed successfully. Total links found: {}", final_count);
+
+                // Build graph from crawled data
+                let graph = crawler::build_graph_from_state(&state);
+
+                // Find shortest path
+                match crate::pathfinder::find_shortest_path(&start_url, &target_url, &graph) {
+                    Some(path) => {
+                        info!("Path found!");
+                        crate::pathfinder::print_path(&path);
+                        info!("Number of links between pages: {}", path.len() - 1);
+                    }
+                    None => {
+                        info!("No path found between {} and {}", start_url, target_url);
+                    }
+                }
             }
             Err(e) => {
                 error!("Crawling failed: {}", e);
             }
         }
     } else {
-        info!("Usage: {} <starting_url>", args[0]);
-        info!("Example: {} https://example.com", args[0]);
+        info!("Usage: {} <start_url> <target_url>", args[0]);
+        info!("Example: {} https://en.wikipedia.org/wiki/Rust_(programming_language) https://en.wikipedia.org/wiki/C_(programming_language)", args[0]);
     }
 
     Ok(())

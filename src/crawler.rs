@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 use std::fs;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicUsize;
@@ -17,6 +17,7 @@ pub struct CrawlerState {
     pub link_to_crawl_queue: RwLock<VecDeque<(Url, usize)>>, // (url, depth)
     pub links_graph: RwLock<Vec<Link>>,
     pub visited_urls: RwLock<std::collections::HashSet<Url>>,
+    pub url_relationships: RwLock<HashMap<Url, Vec<Url>>>, // parent -> children
 }
 pub type CrawlerStateRef = Arc<CrawlerState>;
 
@@ -44,9 +45,9 @@ impl CrawlerConfig {
         Self {
             starting_url,
             scraping_foreign_hosts: false,
-            max_urls: 1000,
-            max_depth: 3,
-            thread_count: 4,
+            max_urls: 10000,
+            max_depth: 30,
+            thread_count: 10,
             request_delay_ms: 2000,
             max_retries: 3,
             request_timeout_sec: LINK_REQUEST_TIMEOUT_SEC,
@@ -89,6 +90,7 @@ impl CrawlerState {
             link_to_crawl_queue: RwLock::new(queue),
             links_graph: RwLock::new(Vec::new()),
             visited_urls: RwLock::new(std::collections::HashSet::new()),
+            url_relationships: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -239,6 +241,12 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                     // Scrape the page
                     match scrape_page(url.clone(), &client, &config).await {
                         Ok(found_urls) => {
+                            // Store relationships
+                            {
+                                let mut relationships = state.url_relationships.write().unwrap();
+                                relationships.insert(url.clone(), found_urls.clone());
+                            }
+
                             // Add found URLs to queue for next depth level
                             {
                                 let mut queue = state.link_to_crawl_queue.write().unwrap();
@@ -289,6 +297,12 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
 
     info!("Crawling completed. Total URLs processed: {}", crawler_state_ref.links_crawled_count.load(Ordering::Relaxed));
     Ok(())
+}
+
+/// Build a graph from the crawled state for pathfinding
+pub fn build_graph_from_state(state: &CrawlerStateRef) -> HashMap<Url, Vec<Url>> {
+    let relationships = state.url_relationships.read().unwrap();
+    relationships.clone()
 }
 
 #[cfg(test)]

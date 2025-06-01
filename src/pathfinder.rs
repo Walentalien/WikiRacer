@@ -1,7 +1,6 @@
 
 use std::collections::{HashMap, VecDeque, HashSet};
 use url::Url;
-use anyhow::Result;
 
 /// Find shortest path between two URLs using BFS
 pub fn find_shortest_path(
