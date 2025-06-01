@@ -30,16 +30,16 @@ pub fn find_shortest_path(
     visited.insert(start.clone());
 
     let mut depth = 0;
-    let mut nodes_at_depth = 1;
-    let mut nodes_processed = 0;
+    let mut nodes_at_current_depth = 1;
+    let mut nodes_processed_at_current_depth = 0;
 
     while let Some(current) = queue.pop_front() {
-        nodes_processed += 1;
+        nodes_processed_at_current_depth += 1;
 
-        if nodes_processed > nodes_at_depth {
+        if nodes_processed_at_current_depth > nodes_at_current_depth {
             depth += 1;
-            nodes_at_depth = queue.len();
-            nodes_processed = 1;
+            nodes_at_current_depth = queue.len();
+            nodes_processed_at_current_depth = 1;
             debug!("Searching at depth {}, {} nodes in queue", depth, queue.len());
         }
 

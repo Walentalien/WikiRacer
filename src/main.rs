@@ -1,5 +1,4 @@
 mod crawler;
-mod link_graph;
 mod pathfinder;
 mod integration_test;
 use log2::*;

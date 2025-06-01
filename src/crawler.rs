@@ -13,7 +13,9 @@ const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
 
 /// Configuration of current state of the crawler
 pub struct CrawlerState {
+    /// Number of crawled links
     pub links_crawled_count: AtomicUsize,
+    /// Links to crawl in queue
     pub link_to_crawl_queue: RwLock<VecDeque<(Url, usize)>>, // (url, depth)
     pub links_graph: RwLock<Vec<Link>>,
     pub visited_urls: RwLock<std::collections::HashSet<Url>>,
