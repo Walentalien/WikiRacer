@@ -47,7 +47,7 @@ impl CrawlerConfig {
             max_urls: 1000,
             max_depth: 3,
             thread_count: 4,
-            request_delay_ms: 100,
+            request_delay_ms: 2000,
             max_retries: 3,
             request_timeout_sec: LINK_REQUEST_TIMEOUT_SEC,
         }
@@ -140,7 +140,7 @@ fn construct_url(path: &str, root_url: Url) -> Result<Url, url::ParseError> {
 }
 
 /// Reads one link from `link_to_crawl_queue` and scrapes all links from there to the end of that queue
-async fn scrape_page(url: Url, client: &Client, config: CrawlerConfig) -> Result<Vec<Url>> {
+async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Result<Vec<Url>> {
     trace!("Scraping page: {}", url);
 
     let response = client
@@ -387,7 +387,7 @@ mod tests {
             .mount(&mock_server)
             .await;
         let url = Url::parse(&format!("{}/empty", &mock_server.uri()))?;
-        let result = scrape_page(url, &client, config).await;
+        let result = scrape_page(url, &client, &config).await;
         assert_eq!(result?, Vec::<Url>::new());
         Ok(())
     }
@@ -418,7 +418,7 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/with-links", &mock_server.uri()))?;
-        let result = scrape_page(url.clone(), &client, config).await?;
+        let result = scrape_page(url.clone(), &client, &config).await?;
 
         let expected = vec![
             construct_url("link1", (&mock_server.uri()).parse().unwrap())?,
@@ -443,7 +443,7 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/not-found", &mock_server.uri()))?;
-        let result = scrape_page(url, &client, config).await;
+        let result = scrape_page(url, &client, &config).await;
         assert!(result.is_err());
         Ok(())
     }
@@ -461,12 +461,9 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = scrape_page(url, &client, config).await;
+        let result = scrape_page(url, &client, &config).await;
         assert!(result.is_err());
         Ok(())
     }
 }
-    // tests for `scrape page` end here
-
-
-
+// tests for `scrape page` end here

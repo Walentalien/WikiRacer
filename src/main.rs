@@ -13,7 +13,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tee(true)
         .module(true)
         .module_with_line(true)
-        .module_filter(|module| module.contains(""))
+        //.module_filter(|module| module.contains(""))
+        .module_filter(|module| !module.starts_with("html5ever"))
         .compress(false)
         //.format(|record, tee| format!("[{}] [{}] {}\n", chrono::Local::now(), record.level(), record.args()))
         .start();
