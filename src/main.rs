@@ -13,6 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         //.module_filter(|module| module.contains(""))
         .module_filter(|module| module.starts_with("WikiRacer"))
         .compress(false)
+        .level("info")
         .start();
     info!("logging Initialized");
 
@@ -23,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let config = std::sync::Arc::new(
             crawler::CrawlerConfig::new(start_url.clone())
-                .with_max_urls(10)
+                .with_max_urls(10_000)
                 .with_max_depth(3)
                 .with_thread_count(2)
                 .with_request_delay(100)
@@ -47,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match crate::pathfinder::find_shortest_path(&start_url, &target_url, &graph) {
                     Some(path) => {
                         info!("Path found!");
-                        crate::pathfinder::print_path(&path);
+                        pathfinder::print_path(&path);
                         info!("Number of links between pages: {}", path.len() - 1);
                     }
                     None => {

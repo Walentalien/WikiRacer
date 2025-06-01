@@ -154,7 +154,7 @@ async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Resul
     let selector = Selector::parse("a").map_err(|e| anyhow!("Failed to parse selector: {}", e))?;
 
     let mut found_urls = Vec::new();
-
+    let scrape_other_langs_wiki = false;
     for element in document.select(&selector) {
         if let Some(href) = element.value().attr("href") {
             if let Ok(parsed_url) = construct_url(href, url.clone()) {
@@ -165,8 +165,8 @@ async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Resul
                 } else {
                     // For Wikipedia, allow different language versions (en.wikipedia.org, es.wikipedia.org, etc.)
                     if let (Some(parsed_host), Some(root_host)) = (parsed_url.host_str(), url.host_str()) {
-                        parsed_host == root_host ||
-                            (parsed_host.ends_with(".wikipedia.org") && root_host.ends_with(".wikipedia.org"))
+                        (parsed_host == root_host ||
+                            (parsed_host.ends_with(".wikipedia.org") && root_host.ends_with(".wikipedia.org"))) && scrape_other_langs_wiki
                     } else {
                         parsed_url.host() == url.host()
                     }
