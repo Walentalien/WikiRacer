@@ -67,9 +67,9 @@ impl CrawlerConfig {
         Self {
             starting_url,
             scraping_foreign_hosts: false,
-            max_urls: 10000,
-            max_depth: 30,
-            thread_count: 10,
+            max_urls: 10,
+            max_depth: 3,
+            thread_count: 2,
             request_delay_ms: 100,
             max_retries: 3,
             request_timeout_sec: LINK_REQUEST_TIMEOUT_SEC,
@@ -171,7 +171,7 @@ async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Resul
                         parsed_url.host() == url.host()
                     }
                 };
-
+                // TODO: Start using HashSet instead of Vec for preformance; Created issue for that
                 if should_include  && !found_urls.contains(&parsed_url) {
                     found_urls.push(parsed_url);
                 } else {
@@ -673,6 +673,6 @@ async fn test_max_depth_respected() {
         let graph = state.url_relationships.read().unwrap();
         assert!(graph.get(&url).is_none()); // No children on error
     }
+    // tests for `scrape page` end here
 }
 
-// tests for `scrape page` end here

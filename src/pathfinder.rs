@@ -87,3 +87,86 @@ pub fn print_path(path: &[Url]) {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use url::Url;
+    use std::collections::HashMap;
+
+    fn url(path: &str) -> Url {
+        Url::parse(&format!("https://example.com{}", path)).unwrap()
+    }
+
+    fn setup_graph() -> HashMap<Url, Vec<Url>> {
+        let a = url("/a");
+        let b = url("/b");
+        let c = url("/c");
+        let d = url("/d");
+        let e = url("/e");
+
+        HashMap::from([
+            (a.clone(), vec![b.clone(), c.clone()]),
+            (b.clone(), vec![d.clone()]),
+            (c.clone(), vec![d.clone()]),
+            (d.clone(), vec![e.clone()]),
+            (e.clone(), vec![]),
+        ])
+    }
+
+    #[test]
+    fn test_path_exists() {
+        let graph = setup_graph();
+        let start = url("/a");
+        let target = url("/e");
+
+        let path = find_shortest_path(&start, &target, &graph).unwrap();
+        assert_eq!(path.first().unwrap(), &start);
+        assert_eq!(path.last().unwrap(), &target);
+        assert!(path.len() >= 3); // at least a → ... → e
+    }
+
+    #[test]
+    fn test_start_equals_target() {
+        let graph = setup_graph();
+        let start = url("/a");
+
+        let path = find_shortest_path(&start, &start, &graph).unwrap();
+        assert_eq!(path.len(), 1);
+        assert_eq!(path[0], start);
+    }
+
+    #[test]
+    fn test_no_path() {
+        let mut graph = setup_graph();
+        // disconnect /a from the rest
+        graph.insert(url("/a"), vec![]);
+
+        let result = find_shortest_path(&url("/a"), &url("/e"), &graph);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_missing_start() {
+        let graph = setup_graph();
+        let unknown = url("/missing");
+
+        let result = find_shortest_path(&unknown, &url("/e"), &graph);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_cycle() {
+        let a = url("/a");
+        let b = url("/b");
+
+        let graph = HashMap::from([
+            (a.clone(), vec![b.clone()]),
+            (b.clone(), vec![a.clone()]), // cycle
+        ]);
+
+        let path = find_shortest_path(&a, &b, &graph).unwrap();
+        assert_eq!(path, vec![a, b]);
+    }
+}

@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .module(true)
         .module_with_line(true)
         //.module_filter(|module| module.contains(""))
-        .module_filter(|module| !module.starts_with("html5ever"))
+        .module_filter(|module| module.starts_with("WikiRacer"))
         .compress(false)
         .start();
     info!("logging Initialized");
@@ -23,9 +23,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let config = std::sync::Arc::new(
             crawler::CrawlerConfig::new(start_url.clone())
-                .with_max_urls(2000)
+                .with_max_urls(10)
                 .with_max_depth(3)
-                .with_thread_count(8)
+                .with_thread_count(2)
                 .with_request_delay(100)
         );
 
