@@ -356,7 +356,7 @@ mod tests {
         assert_eq!(result_url, expected_url);
         Ok(())
     }
-
+    #[test]
     fn test_get_url_with_link_with_trailing_slash() -> Result<(), Box<dyn std::error::Error>> {
         let root_url = Url::parse("https://groq.xyz")?;
 
@@ -377,7 +377,7 @@ mod tests {
     async fn test_scrape_empty_page() -> Result<(), Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
         //let url = Url::parse("https://example.com/empty")?;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0 };
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 0 };
 
 
         let mock_server = wiremock::MockServer::start().await;
@@ -400,7 +400,7 @@ mod tests {
 
         let client = reqwest::Client::new();
         let mock_server = MockServer::start().await;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0 };
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 0 };
 
         // Setup mock HTML page
         Mock::given(method("GET"))
@@ -434,7 +434,7 @@ mod tests {
     async fn test_scrape_page_404() -> Result<(), Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
         let url = Url::parse("https://example.com/not-found")?;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0 };
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 0 };
         let mock_server = wiremock::MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/not-found"))
@@ -442,6 +442,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
+        let url = Url::parse(&format!("{}/not-found", &mock_server.uri()))?;
         let result = scrape_page(url, &client, config).await;
         assert!(result.is_err());
         Ok(())
@@ -449,7 +450,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_scrape_page_timeout() -> Result<(), Box<dyn std::error::Error>> {
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0 };
+        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 0 };
         let client = reqwest::Client::new();
         let url = Url::parse("https://example.com/timeout")?;
 
