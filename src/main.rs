@@ -3,10 +3,11 @@ mod link_graph;
 
 use log2::*;
 
+use anyhow::Result;
 
 
-
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _log2 = log2::open("log/log.txt")
         //.size(100*1024*1024)
         //.rotate(20)
@@ -24,5 +25,37 @@ fn main() {
         info!("arg: {}", arg);
     }
 
+
+    if args.len() > 1 {
+        let start_url = url::Url::parse(&args[1])?;
+
+        let config = std::sync::Arc::new(
+            crawler::CrawlerConfig::new(start_url.clone())
+                .with_max_urls(100)
+                .with_max_depth(2)
+                .with_thread_count(4)
+                .with_request_delay(200)
+        );
+
+        let state = std::sync::Arc::new(crawler::CrawlerState::new(start_url));
+
+        info!("Starting crawler with {} threads, max {} URLs, max depth {}",
+              config.thread_count, config.max_urls, config.max_depth);
+
+        match crawler::crawl(state.clone(), config).await {
+            Ok(_) => {
+                let final_count = state.links_crawled_count;
+                info!("Crawling completed successfully. Total links found: {}", final_count);
+            }
+            Err(e) => {
+                error!("Crawling failed: {}", e);
+            }
+        }
+    } else {
+        info!("Usage: {} <starting_url>", args[0]);
+        info!("Example: {} https://example.com", args[0]);
+    }
+
+    Ok(())
 }
 

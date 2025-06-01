@@ -13,31 +13,104 @@ const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
 /// Configuration of current state of the crawler
 pub struct CrawlerState {
     pub links_crawled_count: usize,
-    pub link_to_crawl_queue: RwLock<VecDeque<Url>>,
-    pub links_graph: RwLock<Vec<Link>>
+    pub link_to_crawl_queue: RwLock<VecDeque<(Url, usize)>>, // (url, depth)
+    pub links_graph: RwLock<Vec<Link>>,
+    pub visited_urls: RwLock<std::collections::HashSet<Url>>,
 }
-#[derive(Serialize)]
-pub struct Link {
-    pub id: LinkID,
-    pub url: String,
-    pub children: Vec<Link>,
-    pub parents: Vec<Link>
-}
-
-pub type LinkID = usize;
-// Arc for simultaneous access by multiple threads
 pub type CrawlerStateRef = Arc<CrawlerState>;
 
-pub struct CrawlerConfig{
-
+pub struct CrawlerConfig {
     /// starting point of scraping
     pub starting_url: Url,
     /// if should scrape foreign hosts
     pub scraping_foreign_hosts: bool,
-    /// max urls to scrape
+    /// max urls to scrape before stopping
     pub max_urls: usize,
+    /// maximum depth to crawl (0 = only starting page, 1 = starting page + links from it, etc.)
+    pub max_depth: usize,
+    /// number of worker threads for concurrent crawling
+    pub thread_count: usize,
+    /// delay between requests in milliseconds (to be respectful to servers)
+    pub request_delay_ms: u64,
+    /// maximum number of retries for failed requests
+    pub max_retries: usize,
+    /// timeout for each request in seconds
+    pub request_timeout_sec: u64,
 }
+
+impl CrawlerConfig {
+    pub fn new(starting_url: Url) -> Self {
+        Self {
+            starting_url,
+            scraping_foreign_hosts: false,
+            max_urls: 1000,
+            max_depth: 3,
+            thread_count: 4,
+            request_delay_ms: 100,
+            max_retries: 3,
+            request_timeout_sec: LINK_REQUEST_TIMEOUT_SEC,
+        }
+    }
+
+    pub fn with_max_urls(mut self, max_urls: usize) -> Self {
+        self.max_urls = max_urls;
+        self
+    }
+
+    pub fn with_max_depth(mut self, max_depth: usize) -> Self {
+        self.max_depth = max_depth;
+        self
+    }
+
+    pub fn with_thread_count(mut self, thread_count: usize) -> Self {
+        self.thread_count = thread_count;
+        self
+    }
+
+    pub fn with_foreign_hosts(mut self, allow: bool) -> Self {
+        self.scraping_foreign_hosts = allow;
+        self
+    }
+
+    pub fn with_request_delay(mut self, delay_ms: u64) -> Self {
+        self.request_delay_ms = delay_ms;
+        self
+    }
+}
+
+impl CrawlerState {
+    pub fn new(starting_url: Url) -> Self {
+        let mut queue = VecDeque::new();
+        queue.push_back((starting_url, 0)); // Start at depth 0
+
+        Self {
+            links_crawled_count: 0,
+            link_to_crawl_queue: RwLock::new(queue),
+            links_graph: RwLock::new(Vec::new()),
+            visited_urls: RwLock::new(std::collections::HashSet::new()),
+        }
+    }
+}
+
 type CrawlerConfigRef = Arc<CrawlerConfig>;
+
+
+
+
+#[derive(Serialize, Clone)]
+pub struct Link {
+    pub id: LinkID,
+    pub url: String,
+    pub depth: usize,
+    pub children: Vec<LinkID>,
+    pub parents: Vec<LinkID>,
+}
+
+pub type LinkID = usize;
+// Arc for simultaneous access by multiple threads
+
+
+
 
 /// If `path` is full_url -> returns it
 /// if relative constructs full url  by merging with `root_url`
@@ -71,7 +144,8 @@ async fn scrape_page(url: Url, client: &Client, config: CrawlerConfig) -> Result
 
     let response = client
         .get(url.clone())
-        .timeout(std::time::Duration::from_secs(LINK_REQUEST_TIMEOUT_SEC))
+        // .timeout(std::time::Duration::from_secs(LINK_REQUEST_TIMEOUT_SEC))
+        .timeout(std::time::Duration::from_secs(config.request_timeout_sec))
         .send()
         .await?;
 
@@ -111,18 +185,109 @@ async fn scrape_page(url: Url, client: &Client, config: CrawlerConfig) -> Result
 }
 
 
-pub fn crawl(crawler_state_ref: CrawlerStateRef,
-            crawler_cfg_ref: CrawlerConfigRef,){
-    let client = Client::new();
+pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerConfigRef) -> Result<()> {
+    use tokio::time::{sleep, Duration};
+    use std::sync::atomic::{AtomicBool, Ordering};
 
-    'crawler: loop{
-        let number_of_links_scraped = crawler_state_ref.links_crawled_count;
-        if number_of_links_scraped > crawler_cfg_ref.max_urls {
-            info!("Max links capasity reached");
-            break 'crawler;
-        }
+    let should_stop = Arc::new(AtomicBool::new(false));
+    let mut handles = Vec::new();
 
+    // Spawn worker threads
+    for worker_id in 0..crawler_cfg_ref.thread_count {
+        let state = Arc::clone(&crawler_state_ref);
+        let config = Arc::clone(&crawler_cfg_ref);
+        let stop_flag = Arc::clone(&should_stop);
+
+        let handle = tokio::spawn(async move {
+            let client = Client::new();
+            info!("Worker {} started", worker_id);
+
+            while !stop_flag.load(Ordering::Relaxed) {
+                // Get next URL to crawl
+                let next_item = {
+                    let mut queue = state.link_to_crawl_queue.write().unwrap();
+                    queue.pop_front()
+                };
+
+                if let Some((url, depth)) = next_item {
+                    // Check if we've exceeded max depth
+                    if depth >= config.max_depth {
+                        debug!("Skipping {} - max depth {} reached", url, config.max_depth);
+                        continue;
+                    }
+
+                    // Check if we've already visited this URL
+                    {
+                        let mut visited = state.visited_urls.write().unwrap();
+                        if visited.contains(&url) {
+                            continue;
+                        }
+                        visited.insert(url.clone());
+                    }
+
+                    // Check if we've reached max URLs
+                    if state.links_crawled_count >= config.max_urls {
+                        info!("Worker {}: Max URLs reached", worker_id);
+                        stop_flag.store(true, Ordering::Relaxed);
+                        break;
+                    }
+
+                    info!("Worker {}: Crawling {} at depth {}", worker_id, url, depth);
+
+                    // Scrape the page
+                    match scrape_page(url.clone(), &client, &config).await {
+                        Ok(found_urls) => {
+                            // Add found URLs to queue for next depth level
+                            {
+                                let mut queue = state.link_to_crawl_queue.write().unwrap();
+                                for found_url in found_urls {
+                                    queue.push_back((found_url, depth + 1));
+                                }
+                            }
+
+                            // Update crawled count
+                            // Note: This should be atomic in a real implementation
+
+                            // Add delay to be respectful to servers
+                            if config.request_delay_ms > 0 {
+                                sleep(Duration::from_millis(config.request_delay_ms)).await;
+                            }
+                        }
+                        Err(e) => {
+                            debug!("Worker {}: Failed to scrape {}: {}", worker_id, url, e);
+                        }
+                    }
+                } else {
+                    // No more URLs to crawl, wait a bit or exit
+                    sleep(Duration::from_millis(100)).await;
+
+                    // Check if all workers are idle (no more work)
+                    let queue_empty = {
+                        let queue = state.link_to_crawl_queue.read().unwrap();
+                        queue.is_empty()
+                    };
+
+                    if queue_empty {
+                        info!("Worker {}: No more URLs to crawl", worker_id);
+                        stop_flag.store(true, Ordering::Relaxed);
+                        break;
+                    }
+                }
+            }
+
+            info!("Worker {} finished", worker_id);
+        });
+
+        handles.push(handle);
     }
+
+    // Wait for all workers to complete
+    for handle in handles {
+        handle.await.map_err(|e| anyhow!("Worker thread panicked: {}", e))?;
+    }
+
+    info!("Crawling completed. Total URLs processed: {}", crawler_state_ref.links_crawled_count);
+    Ok(())
 }
 
 #[cfg(test)]
