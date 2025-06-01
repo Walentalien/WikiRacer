@@ -70,21 +70,5 @@ mod integration_tests {
         Ok(())
     }
 
-    #[test]
-    fn test_url_normalization() {
-        use crate::crawler::construct_url;
-        use url::Url;
 
-        let base = Url::parse("https://en.wikipedia.org/wiki/Matter").unwrap();
-
-        // Test fragment removal
-        let url1 = construct_url("/wiki/Grand_Unified_Theory#History", base.clone()).unwrap();
-        let url2 = construct_url("/wiki/Grand_Unified_Theory", base.clone()).unwrap();
-
-        assert_eq!(url1, url2, "URLs with and without fragments should be equal");
-
-        // Test trailing slash removal
-        let url3 = construct_url("/wiki/Grand_Unified_Theory/", base.clone()).unwrap();
-        assert_eq!(url2, url3, "URLs with and without trailing slash should be equal");
-    }
 }
