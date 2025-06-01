@@ -1,7 +1,7 @@
 mod crawler;
 mod link_graph;
 mod pathfinder;
-
+mod integration_test;
 use log2::*;
 
 use anyhow::Result;
@@ -33,10 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let config = std::sync::Arc::new(
             crawler::CrawlerConfig::new(start_url.clone())
-                .with_max_urls(500)
-                .with_max_depth(4)
-                .with_thread_count(4)
-                .with_request_delay(200)
+                .with_max_urls(2000)
+                .with_max_depth(3)
+                .with_thread_count(8)
+                .with_request_delay(100)
         );
 
         let state = std::sync::Arc::new(crawler::CrawlerState::new(start_url.clone()));

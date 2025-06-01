@@ -129,13 +129,13 @@ fn construct_url(path: &str, root_url: Url) -> Result<Url, url::ParseError> {
         root_url.join(path)?
     };
 
-    // Normalize: trim trailing slashes from path and fragment
+    // Normalize: trim trailing slashes from path and remove fragments
     let trimmed_path = url.path().trim_end_matches('/').to_string();
     url.set_path(&trimmed_path);
 
-    if let Some(frag) = url.fragment().map(|s| s.to_string()) {
-        url.set_fragment(Some(frag.trim_end_matches('/')));
-    }
+    // Remove fragment for consistent URLs
+    url.set_fragment(None);
+
     trace!("Constructed link URL: {}", url);
     Ok(url)
 
@@ -167,16 +167,22 @@ async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Resul
             if let Ok(parsed_url) = construct_url(href, url.clone()) {
 
 
-                // Only collect URLs from the same host is `CrawlerConfig.scraping_foreign_hosts==true'
-                if config.scraping_foreign_hosts == true {
+                // Check if we should include this URL
+                let should_include = if config.scraping_foreign_hosts {
+                    true
+                } else {
+                    // For Wikipedia, allow different language versions (en.wikipedia.org, es.wikipedia.org, etc.)
+                    if let (Some(parsed_host), Some(root_host)) = (parsed_url.host_str(), url.host_str()) {
+                        parsed_host == root_host ||
+                            (parsed_host.ends_with(".wikipedia.org") && root_host.ends_with(".wikipedia.org"))
+                    } else {
+                        parsed_url.host() == url.host()
+                    }
+                };
 
+                if should_include {
                     found_urls.push(parsed_url);
-                }
-                else if  parsed_url.host() == url.host() {
-                    found_urls.push(parsed_url);
-                }
-                else {
-                    // inform about skipping a link
+                } else {
                     debug!("Skipped scraping {parsed_url} because its foreign host");
                 }
             }

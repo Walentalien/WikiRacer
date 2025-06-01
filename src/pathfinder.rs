@@ -8,8 +8,18 @@ pub fn find_shortest_path(
     target: &Url,
     graph: &HashMap<Url, Vec<Url>>
 ) -> Option<Vec<Url>> {
+    use log2::debug;
+
+    debug!("Searching for path from {} to {}", start, target);
+    debug!("Graph contains {} nodes", graph.len());
+
     if start == target {
         return Some(vec![start.clone()]);
+    }
+
+    if !graph.contains_key(start) {
+        debug!("Start URL not found in graph");
+        return None;
     }
 
     let mut queue = VecDeque::new();
@@ -19,7 +29,20 @@ pub fn find_shortest_path(
     queue.push_back(start.clone());
     visited.insert(start.clone());
 
+    let mut depth = 0;
+    let mut nodes_at_depth = 1;
+    let mut nodes_processed = 0;
+
     while let Some(current) = queue.pop_front() {
+        nodes_processed += 1;
+
+        if nodes_processed > nodes_at_depth {
+            depth += 1;
+            nodes_at_depth = queue.len();
+            nodes_processed = 1;
+            debug!("Searching at depth {}, {} nodes in queue", depth, queue.len());
+        }
+
         if let Some(neighbors) = graph.get(&current) {
             for neighbor in neighbors {
                 if !visited.contains(neighbor) {
@@ -28,6 +51,7 @@ pub fn find_shortest_path(
                     queue.push_back(neighbor.clone());
 
                     if neighbor == target {
+                        debug!("Found target at depth {}", depth + 1);
                         // Reconstruct path
                         let mut path = Vec::new();
                         let mut node = target.clone();
@@ -46,6 +70,7 @@ pub fn find_shortest_path(
         }
     }
 
+    debug!("No path found after searching {} nodes", visited.len());
     None // No path found
 }
 
