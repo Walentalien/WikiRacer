@@ -1,6 +1,8 @@
 mod crawler;
 mod pathfinder;
 mod integration_test;
+mod config;
+
 use log2::*;
 use anyhow::Result;
 
@@ -10,10 +12,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tee(true)
         .module(true)
         .module_with_line(true)
-        //.module_filter(|module| module.contains(""))
         .module_filter(|module| module.starts_with("WikiRacer"))
         .compress(false)
-        .level("info")
+        .level("trace")
         .start();
     info!("logging Initialized");
 
@@ -24,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let config = std::sync::Arc::new(
             crawler::CrawlerConfig::new(start_url.clone())
-                .with_max_urls(10_000)
+                .with_max_urls(300)
                 .with_max_depth(3)
                 .with_thread_count(2)
                 .with_request_delay(100)
@@ -67,4 +68,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

@@ -1,19 +1,17 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use super::*;
     use std::sync::Arc;
     use url::Url;
 
     #[tokio::test]
-    #[ignore] // Run with --ignored flag when testing against real Wikipedia
     async fn test_wikipedia_path_finding() -> Result<(), Box<dyn std::error::Error>> {
         let start_url = Url::parse("https://en.wikipedia.org/wiki/Matter")?;
         let target_url = Url::parse("https://en.wikipedia.org/wiki/Grand_Unified_Theory")?;
 
         let config = Arc::new(
             crate::crawler::CrawlerConfig::new(start_url.clone())
-                .with_max_urls(1000)
+                .with_max_urls(300)
                 .with_max_depth(2)
                 .with_thread_count(4)
                 .with_request_delay(100)

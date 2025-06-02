@@ -136,7 +136,7 @@ pub(crate) fn construct_url(path: &str, root_url: Url) -> Result<Url, url::Parse
 }
 
 /// Reads one link from `link_to_crawl_queue` and scrapes all links from there to the end of that queue
-async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Result<Vec<Url>> {
+pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Result<Vec<Url>> {
     trace!("Scraping page: {}", url);
 
     let response = client
@@ -151,40 +151,37 @@ async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Resul
 
     let html = response.text().await?;
     let document = Html::parse_document(&html);
-    let selector = Selector::parse("a").map_err(|e| anyhow!("Failed to parse selector: {}", e))?;
+    let selector = Selector::parse("a")
+        .map_err(|e| anyhow!("Failed to parse <a> selector: {}", e))?;
 
-    let mut found_urls = Vec::new();
-    let scrape_other_langs_wiki = false;
+    let mut found_urls = HashSet::new();
+    let base_host = url.host_str();
+
     for element in document.select(&selector) {
         if let Some(href) = element.value().attr("href") {
             if let Ok(parsed_url) = construct_url(href, url.clone()) {
-
-                // Check if we should include this URL
+                // Foreign host check
                 let should_include = if config.scraping_foreign_hosts {
                     true
                 } else {
-                    // For Wikipedia, allow different language versions (en.wikipedia.org, es.wikipedia.org, etc.)
-                    if let (Some(parsed_host), Some(root_host)) = (parsed_url.host_str(), url.host_str()) {
-                        (parsed_host == root_host ||
-                            (parsed_host.ends_with(".wikipedia.org") && root_host.ends_with(".wikipedia.org"))) && scrape_other_langs_wiki
-                    } else {
-                        parsed_url.host() == url.host()
+                    match (base_host, parsed_url.host_str()) {
+                        (Some(base), Some(target)) => base == target,
+                        _ => false, // skip if either host is missing
                     }
                 };
-                // TODO: Start using HashSet instead of Vec for preformance; Created issue for that
-                if should_include  && !found_urls.contains(&parsed_url) {
-                    found_urls.push(parsed_url);
+
+                if should_include {
+                    found_urls.insert(parsed_url);
                 } else {
-                    debug!("Skipped scraping {parsed_url} because its foreign host");
+                    debug!("Skipped foreign host link: {}", parsed_url);
                 }
             }
         }
     }
 
-    trace!("Found {} urls on page {}", found_urls.len(), url);
-    Ok(found_urls)
+    info!("Found {} urls on page {}", found_urls.len(), url);
+    Ok(found_urls.into_iter().collect())
 }
-
 
 pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerConfigRef) -> Result<()> {
     let active_workers = Arc::new(AtomicUsize::new(0));
@@ -302,14 +299,9 @@ pub fn build_graph_from_state(state: &CrawlerStateRef) -> HashMap<Url, Vec<Url>>
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::sync::atomic::Ordering;
-    use std::time::Duration;
-    use url::Url;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-    use crate::crawler::{construct_url, crawl, scrape_page, CrawlerConfig, CrawlerConfigRef, CrawlerState, CrawlerStateRef, LINK_REQUEST_TIMEOUT_SEC};
-
+    use super::*;
     // tests for construct_url start here
     #[test]
     fn test_get_url() -> Result<(), Box<dyn std::error::Error>> {
