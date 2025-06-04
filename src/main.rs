@@ -5,9 +5,12 @@ mod config;
 
 use log2::*;
 use anyhow::Result;
+use url::Url;
+use std::sync::Arc;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
+    // Init logger
     let _log2 = open("log/log.txt")
         .tee(true)
         .module(true)
@@ -16,54 +19,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compress(false)
         .level("trace")
         .start();
-    info!("logging Initialized");
+    info!("Logging initialized");
 
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() >= 3 {
-        let start_url = url::Url::parse(&args[1])?;
-        let target_url = url::Url::parse(&args[2])?;
+    // Load CLI config
+    let cfg = config::Config::new();
+    if cfg.verbose {
+        info!("Loaded config: {:?}", cfg);
+    }
+    cfg.validate()?;
 
-        let config = std::sync::Arc::new(
-            crawler::CrawlerConfig::new(start_url.clone())
-                .with_max_urls(300)
-                .with_max_depth(3)
-                .with_thread_count(2)
-                .with_request_delay(100)
-        );
+    let start_url = Url::parse(&cfg.start_url)?;
+    let target_url = Url::parse(&cfg.target_url)?;
 
-        let state = std::sync::Arc::new(crawler::CrawlerState::new(start_url.clone()));
+    let crawler_config = Arc::new(
+        crawler::CrawlerConfig::new(start_url.clone())
+            .with_max_urls(cfg.max_urls)
+            .with_max_depth(cfg.max_depth)
+            .with_thread_count(cfg.thread_count)
+            .with_request_delay(cfg.request_delay),
+    );
 
-        info!("Starting crawler with {} threads, max {} URLs, max depth {}",
-              config.thread_count, config.max_urls, config.max_depth);
-        info!("Finding path from {} to {}", start_url, target_url);
+    let state = Arc::new(crawler::CrawlerState::new(start_url.clone()));
 
-        match crawler::crawl(state.clone(), config).await {
-            Ok(_) => {
-                let final_count = state.links_crawled_count.load(std::sync::atomic::Ordering::Relaxed);
-                info!("Crawling completed successfully. Total links found: {}", final_count);
+    info!(
+        "Starting crawler with {} threads, max {} URLs, max depth {}",
+        crawler_config.thread_count, crawler_config.max_urls, crawler_config.max_depth
+    );
+    info!("Finding path from {} to {}", start_url, target_url);
 
-                // Build graph from crawled data
-                let graph = crawler::build_graph_from_state(&state);
+    match crawler::crawl(state.clone(), crawler_config).await {
+        Ok(_) => {
+            let final_count = state.links_crawled_count.load(std::sync::atomic::Ordering::Relaxed);
+            info!("Crawling completed. Total links found: {}", final_count);
 
-                // Find shortest path
-                match crate::pathfinder::find_shortest_path(&start_url, &target_url, &graph) {
-                    Some(path) => {
-                        info!("Path found!");
-                        pathfinder::print_path(&path);
-                        info!("Number of links between pages: {}", path.len() - 1);
-                    }
-                    None => {
-                        info!("No path found between {} and {}", start_url, target_url);
-                    }
+            let graph = crawler::build_graph_from_state(&state);
+
+            match pathfinder::find_shortest_path(&start_url, &target_url, &graph) {
+                Some(path) => {
+                    info!("Path found!");
+                    pathfinder::print_path(&path);
+                    info!("Number of links between pages: {}", path.len() - 1);
+                }
+                None => {
+                    info!("No path found between {} and {}", start_url, target_url);
                 }
             }
-            Err(e) => {
-                error!("Crawling failed: {}", e);
+
+            if let Some(path) = cfg.output_file {
+                std::fs::write(&path, format!("{:?}", graph))?;
+                info!("Graph written to {:?}", path);
             }
         }
-    } else {
-        info!("Usage: {} <start_url> <target_url>", args[0]);
-        info!("Example: {} https://en.wikipedia.org/wiki/Rust_(programming_language) https://en.wikipedia.org/wiki/C_(programming_language)", args[0]);
+        Err(e) => {
+            error!("Crawling failed: {}", e);
+        }
     }
 
     Ok(())
