@@ -31,12 +31,10 @@ The available flags are:
 * `-v, --verbose` – enable verbose logging
 
 TODO:
-1. Crawl function
-2. Data Structures to store scraped data
-   Argument Parsing
-   Pretty Print Args
-   GUI for this crawler
-   start using anychow
+1.   Argument Parsing
+2.   Pretty Print Args
+3.   GUI for this crawler
+4.   start using anychow
 
 Creating graph visualization: https://doc.arcgis.com/en/insights/latest/create/link-chart.htm
 
@@ -49,7 +47,7 @@ Performance Optimizations:
 
 
 Code Structure Improvements:
-Split the large crawler.rs (671 lines) into smaller, more focused modules
+Split the large crawler.rs into smaller, more focused modules
 Create a dedicated configuration module for better configuration management
 Implement proper error handling with custom error types
 Add more comprehensive logging and metrics collection
@@ -74,11 +72,11 @@ Implement better progress reporting and user feedback
 Here's a specific implementation plan to achieve these improvements:
 
 # Contribution Guideline
-Open for Contribution
+**Open for Contribution**
 Looking for help with:
 - GUI Application
 - Path Finding/Link Processing Algorithm Improvement
-- Visualization of graph creation process
+- **Visualization** of graph creation process
 
 ## License
 
