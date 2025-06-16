@@ -1,4 +1,4 @@
 /target
 .idea
-log
-scraped_links
+log/*
+scraped_links/*.txt

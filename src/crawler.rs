@@ -12,7 +12,36 @@ use serde::Serialize;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
-const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
+/*
+Macro for debugging purposes that writes links to the file;
+I want to see if i'm getting any duplicates
+ */
+#[macro_export]
+macro_rules! write_url {
+    ($path:expr, $line:expr) => {{
+        use std::fs::OpenOptions;
+        use std::io::Write;
+        use std::time::Duration;
+
+        let elapsed: Duration = $crate::START_TIME.elapsed();
+        let minutes = elapsed.as_secs() / 60;
+        let seconds = elapsed.as_secs() % 60;
+
+        let result = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open($path)
+            .and_then(|mut file| {
+                writeln!(file, "[{:02}:{:02}] {}", minutes, seconds, $line)
+            });
+
+        if let Err(e) = result {
+            eprintln!("Failed to write to {}: {}", $path, e);
+        }
+    }};
+}
+
+pub const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
 
 /// Configuration of current state of the crawler
 pub struct CrawlerState {
@@ -24,7 +53,7 @@ pub struct CrawlerState {
     pub visited_urls: RwLock<std::collections::HashSet<Url>>,
     /// Graph Structure to visualize the result later
     /// TODO: Create visualization
-    pub url_relationships: RwLock<HashMap<Url, Vec<Url>>>, // parent -> children
+    pub url_relationships: RwLock<HashMap<Url, HashSet<Url>>>, // parent -> children
     /// Indicator that target link has been found
     pub target_found: AtomicBool,
 }
@@ -140,14 +169,16 @@ pub(crate) fn construct_url(path: &str, root_url: Url) -> Result<Url, url::Parse
     // Remove fragment for consistent URLs
     url.set_fragment(None);
 
-    trace!("Constructed link URL: {}", url);
+    //trace!("Constructed link URL: {}", url);
+
+    write_url!("scraped_links/log.txt", &url);
     Ok(url)
 
 }
 
 /// Reads one link from `link_to_crawl_queue` and scrapes all links from there to the end of that queue
 /// Returns: All found links on the page
-pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Result<Vec<Url>> {
+pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Result<HashSet<Url>> {
     trace!("Scraping page: {}", url);
 
     let response = client
@@ -167,9 +198,11 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
 
     let mut found_urls = HashSet::new();
     let base_host = url.host_str();
-
+    // for every parsed element in html
     for element in document.select(&selector) {
+        //if it's has href attribute (is a link)
         if let Some(href) = element.value().attr("href") {
+            // construct a url
             if let Ok(parsed_url) = construct_url(href, url.clone()) {
                 // Foreign host check
                 let should_include = if config.scraping_foreign_hosts {
@@ -182,6 +215,7 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
                 };
 
                 if should_include {
+                    // add to later returned vec of links
                     found_urls.insert(parsed_url);
                 } else {
                     debug!("Skipped foreign host link: {}", parsed_url);
@@ -190,8 +224,13 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
         }
     }
 
+    // Maybe will cahnge foreign host scraping logic to be this:
+    // if !config.scraping_foreign_hosts {
+    //     found_urls.retain(|u| u.host_str() == base_host);
+    // }
+
     info!("Found {} urls on page {}", found_urls.len(), url);
-    Ok(found_urls.into_iter().collect())
+    Ok(found_urls)
 }
 
 pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerConfigRef) -> Result<()> {
@@ -306,31 +345,12 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
 }
 
 /// Build a graph from the crawled state for pathfinding
-pub fn build_graph_from_state(state: &CrawlerStateRef) -> HashMap<Url, Vec<Url>> {
+pub fn build_graph_from_state(state: &CrawlerStateRef) -> HashMap<Url, HashSet<Url>> {
     let relationships = state.url_relationships.read().unwrap();
     relationships.clone()
 }
-/*
-Macro for debugging purposes that writes links to the file;
-I want to see if i'm getting any duplicates
- */
-#[macro_export]
-macro_rules! write_url {
-    ($path:expr, $line:expr) => {{
-        use std::fs::OpenOptions;
-        use std::io::Write;
 
-        let result = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open($path)
-            .and_then(|mut file| writeln!(file, "{}", $line));
 
-        if let Err(e) = result {
-            eprintln!("Failed to write to {}: {}", $path, e);
-        }
-    }};
-}
 
 #[cfg(test)]
 mod tests {
@@ -454,7 +474,7 @@ mod tests {
             .await;
         let url = Url::parse(&format!("{}/empty", &mock_server.uri()))?;
         let result = scrape_page(url, &client, &config).await;
-        assert_eq!(result?, Vec::<Url>::new());
+        assert_eq!(result?, HashSet::<Url>::new());
         Ok(())
     }
 
@@ -494,11 +514,17 @@ mod tests {
 
         let url = Url::parse(&format!("{}/with-links", &mock_server.uri()))?;
         let result = scrape_page(url.clone(), &client, &config).await?;
-
-        let expected = vec![
+        //collected form a vec
+        let expected: HashSet<Url> = vec![
             construct_url("link1", (&mock_server.uri()).parse().unwrap())?,
             construct_url("../link3", (&mock_server.uri()).parse().unwrap())?,
-        ];
+        ].into_iter().collect();
+        //alternative to collecting:
+        // let expected: HashSet<Url> = HashSet::from_iter([
+        //     construct_url("link1", (&mock_server.uri()).parse().unwrap())?,
+        //     construct_url("../link3", (&mock_server.uri()).parse().unwrap())?,
+        // ]);
+
 
         assert_eq!(result, expected);
 

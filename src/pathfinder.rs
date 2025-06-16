@@ -6,7 +6,7 @@ use url::Url;
 pub fn find_shortest_path_bfs(
     start: &Url,
     target: &Url,
-    graph: &HashMap<Url, Vec<Url>>
+    graph: &HashMap<Url, HashSet<Url>>,
 ) -> Option<Vec<Url>> {
     use log2::debug;
 
@@ -99,20 +99,30 @@ mod tests {
         Url::parse(&format!("https://example.com{}", path)).unwrap()
     }
 
-    fn setup_graph() -> HashMap<Url, Vec<Url>> {
+    fn setup_graph() -> HashMap<Url, HashSet<Url>> {
         let a = url("/a");
         let b = url("/b");
         let c = url("/c");
         let d = url("/d");
         let e = url("/e");
 
+        // HashMap::from([
+        //     (a.clone(), vec![b.clone(), c.clone()]),
+        //     (b.clone(), vec![d.clone()]),
+        //     (c.clone(), vec![d.clone()]),
+        //     (d.clone(), vec![e.clone()]),
+        //     (e.clone(), vec![]),
+        // ])
+        use std::collections::{HashMap, HashSet};
+
         HashMap::from([
-            (a.clone(), vec![b.clone(), c.clone()]),
-            (b.clone(), vec![d.clone()]),
-            (c.clone(), vec![d.clone()]),
-            (d.clone(), vec![e.clone()]),
-            (e.clone(), vec![]),
+            (a.clone(), vec![b.clone(), c.clone()].into_iter().collect()),
+            (b.clone(), vec![d.clone()].into_iter().collect()),
+            (c.clone(), vec![d.clone()].into_iter().collect()),
+            (d.clone(), vec![e.clone()].into_iter().collect()),
+            (e.clone(), HashSet::new()),
         ])
+
     }
 
     #[test]
@@ -141,7 +151,7 @@ mod tests {
     fn test_no_path() {
         let mut graph = setup_graph();
         // disconnect /a from the rest
-        graph.insert(url("/a"), vec![]);
+        graph.insert(url("/a"), HashSet::new());
 
         let result = find_shortest_path_bfs(&url("/a"), &url("/e"), &graph);
         assert!(result.is_none());
@@ -162,8 +172,8 @@ mod tests {
         let b = url("/b");
 
         let graph = HashMap::from([
-            (a.clone(), vec![b.clone()]),
-            (b.clone(), vec![a.clone()]), // cycle
+            (a.clone(), (vec![b.clone()]).into_iter().collect()),
+            (b.clone(), (vec![a.clone()]).into_iter().collect()), // cycle
         ]);
 
         let path = find_shortest_path_bfs(&a, &b, &graph).unwrap();

@@ -7,9 +7,12 @@ use log2::*;
 use anyhow::Result;
 use url::Url;
 use std::sync::Arc;
+use std::time::Instant;
+pub static START_TIME: once_cell::sync::Lazy<Instant> = once_cell::sync::Lazy::new(Instant::now);
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let _ = *START_TIME;
     // Init logger
     let _log2 = //open("log/log.txt")
         //.tee(true)

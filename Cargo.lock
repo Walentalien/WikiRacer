@@ -12,6 +12,7 @@ dependencies = [
  "eframe",
  "egui",
  "log2",
+ "once_cell",
  "petgraph",
  "reqwest",
  "scraper",
