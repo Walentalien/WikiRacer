@@ -11,8 +11,9 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Init logger
-    let _log2 = open("log/log.txt")
-        .tee(true)
+    let _log2 = //open("log/log.txt")
+        //.tee(true)
+    stdout()
         .module(true)
         .module_with_line(true)
         .module_filter(|module| module.starts_with("WikiRacer"))
@@ -54,7 +55,7 @@ async fn main() -> Result<()> {
 
             let graph = crawler::build_graph_from_state(&state);
 
-            match pathfinder::find_shortest_path(&start_url, &target_url, &graph) {
+            match pathfinder::find_shortest_path_bfs(&start_url, &target_url, &graph) {
                 Some(path) => {
                     info!("Path found!");
                     pathfinder::print_path(&path);
@@ -77,3 +78,4 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+

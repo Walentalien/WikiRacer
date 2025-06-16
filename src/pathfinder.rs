@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque, HashSet};
 use url::Url;
 
 /// Find shortest path between two URLs using BFS
-pub fn find_shortest_path(
+pub fn find_shortest_path_bfs(
     start: &Url,
     target: &Url,
     graph: &HashMap<Url, Vec<Url>>
@@ -121,7 +121,7 @@ mod tests {
         let start = url("/a");
         let target = url("/e");
 
-        let path = find_shortest_path(&start, &target, &graph).unwrap();
+        let path = find_shortest_path_bfs(&start, &target, &graph).unwrap();
         assert_eq!(path.first().unwrap(), &start);
         assert_eq!(path.last().unwrap(), &target);
         assert!(path.len() >= 3); // at least a → ... → e
@@ -132,7 +132,7 @@ mod tests {
         let graph = setup_graph();
         let start = url("/a");
 
-        let path = find_shortest_path(&start, &start, &graph).unwrap();
+        let path = find_shortest_path_bfs(&start, &start, &graph).unwrap();
         assert_eq!(path.len(), 1);
         assert_eq!(path[0], start);
     }
@@ -143,7 +143,7 @@ mod tests {
         // disconnect /a from the rest
         graph.insert(url("/a"), vec![]);
 
-        let result = find_shortest_path(&url("/a"), &url("/e"), &graph);
+        let result = find_shortest_path_bfs(&url("/a"), &url("/e"), &graph);
         assert!(result.is_none());
     }
 
@@ -152,7 +152,7 @@ mod tests {
         let graph = setup_graph();
         let unknown = url("/missing");
 
-        let result = find_shortest_path(&unknown, &url("/e"), &graph);
+        let result = find_shortest_path_bfs(&unknown, &url("/e"), &graph);
         assert!(result.is_none());
     }
 
@@ -166,7 +166,7 @@ mod tests {
             (b.clone(), vec![a.clone()]), // cycle
         ]);
 
-        let path = find_shortest_path(&a, &b, &graph).unwrap();
+        let path = find_shortest_path_bfs(&a, &b, &graph).unwrap();
         assert_eq!(path, vec![a, b]);
     }
 }

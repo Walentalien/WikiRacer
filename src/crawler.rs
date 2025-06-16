@@ -9,6 +9,7 @@ use reqwest::Client;
 use anyhow::{Result, anyhow};
 use scraper::{Html, Selector};
 use serde::Serialize;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
@@ -141,7 +142,7 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
 
     let response = client
         .get(url.clone())
-        .timeout(std::time::Duration::from_secs(config.request_timeout_sec))
+        .timeout(Duration::from_secs(config.request_timeout_sec))
         .send()
         .await?;
 
@@ -185,7 +186,7 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
 
 pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerConfigRef) -> Result<()> {
     let active_workers = Arc::new(AtomicUsize::new(0));
-    let mut handles = Vec::new();
+    let mut handles: Vec<JoinHandle<()>> = Vec::new();
 
     for worker_id in 0..crawler_cfg_ref.thread_count {
         let state = Arc::clone(&crawler_state_ref);
@@ -255,7 +256,6 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
 
                     active_workers.fetch_sub(1, Ordering::SeqCst);
                 } else {
-                    // Wait briefly and check if all workers are idle and queue is empty
                     sleep(Duration::from_millis(200)).await;
 
                     let queue_empty = {
@@ -278,15 +278,9 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
         handles.push(handle);
     }
 
-    // Wait for all threads to finish
     for handle in handles {
-        handle.await.map_err(|e| anyhow::anyhow!("Worker panicked: {}", e))?;
+        handle.await?;
     }
-
-    info!(
-        "Crawling completed. Total URLs processed: {}",
-        crawler_state_ref.links_crawled_count.load(Ordering::Relaxed)
-    );
 
     Ok(())
 }
@@ -295,6 +289,27 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
 pub fn build_graph_from_state(state: &CrawlerStateRef) -> HashMap<Url, Vec<Url>> {
     let relationships = state.url_relationships.read().unwrap();
     relationships.clone()
+}
+/*
+Macro for debugging purposes that writes links to the file;
+I want to see if i'm getting any duplicates
+ */
+#[macro_export]
+macro_rules! write_url {
+    ($path:expr, $line:expr) => {{
+        use std::fs::OpenOptions;
+        use std::io::Write;
+
+        let result = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open($path)
+            .and_then(|mut file| writeln!(file, "{}", $line));
+
+        if let Err(e) = result {
+            eprintln!("Failed to write to {}: {}", $path, e);
+        }
+    }};
 }
 
 #[cfg(test)]

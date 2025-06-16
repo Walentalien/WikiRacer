@@ -54,9 +54,12 @@ Add examples for common use cases
 Implement better progress reporting and user feedback
 Here's a specific implementation plan to achieve these improvements:
 
-# Contribution QuideLine
+# Contribution GuideLine
 Open for Contribution
 Looking for help with:
 - GUI Application
 - Path Finding/Link Processing Algorithm Improvement
 - Visualization of graph/ of graph creation (process)
+- Adding relevance evaluation to make the process quicker
+- Caching/Caching logic 
+- 

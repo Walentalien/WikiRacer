@@ -44,13 +44,13 @@ impl Config {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
-        if self.max_urls == 0 {
+        if self.max_urls <= 0 {
             anyhow::bail!("max_urls must be greater than 0");
         }
-        if self.max_depth == 0 {
+        if self.max_depth <= 0 {
             anyhow::bail!("max_depth must be greater than 0");
         }
-        if self.thread_count == 0 {
+        if self.thread_count <= 0 {
             anyhow::bail!("thread_count must be greater than 0");
         }
         Ok(())
