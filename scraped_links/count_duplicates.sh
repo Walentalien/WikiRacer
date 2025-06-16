@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# THIS SCRIPT COUNTS HOW MANY DUPLICATES WERE PROCESSED
+# is used within `construct_url` to see how many ducplicates were constructed
+# ans  `scrape_page` to see how many duplicated were inserted in found_urls (although it's hashset but
+# for performance
+
 # File to check (pass it as an argument)
 FILE="$1"
 

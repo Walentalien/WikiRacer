@@ -18,28 +18,63 @@ I want to see if i'm getting any duplicates
  */
 #[macro_export]
 macro_rules! write_url {
-    ($path:expr, $line:expr) => {{
-        use std::fs::OpenOptions;
-        use std::io::Write;
-        use std::time::Duration;
+    // Case: HashSet or iterable
+    ($path:expr, [$($url:expr),+ $(,)?]) => {{
+        #[cfg(debug_assertions)]
+        {
+            use std::fs::OpenOptions;
+            use std::io::Write;
+            use std::time::Duration;
 
-        let elapsed: Duration = $crate::START_TIME.elapsed();
-        let minutes = elapsed.as_secs() / 60;
-        let seconds = elapsed.as_secs() % 60;
+            let elapsed = $crate::START_TIME.elapsed();
+            let minutes = elapsed.as_secs() / 60;
+            let seconds = elapsed.as_secs() % 60;
 
-        let result = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open($path)
-            .and_then(|mut file| {
-                writeln!(file, "[{:02}:{:02}] {}", minutes, seconds, $line)
-            });
+            let result = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open($path)
+                .and_then(|mut file| {
+                    $(
+                        writeln!(file, "[{:02}:{:02}] {}", minutes, seconds, $url)?;
+                    )+
+                    Ok(())
+                });
 
-        if let Err(e) = result {
-            eprintln!("Failed to write to {}: {}", $path, e);
+            if let Err(e) = result {
+                eprintln!("Failed to write to {}: {}", $path, e);
+            }
+        }
+    }};
+
+    // Case: single Url
+    ($path:expr, $url:expr) => {{
+        #[cfg(debug_assertions)]
+        {
+            use std::fs::OpenOptions;
+            use std::io::Write;
+            use std::time::Duration;
+
+            let elapsed = $crate::START_TIME.elapsed();
+            let minutes = elapsed.as_secs() / 60;
+            let seconds = elapsed.as_secs() % 60;
+
+            let result = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open($path)
+                .and_then(|mut file| {
+                    writeln!(file, "[{:02}:{:02}] {}", minutes, seconds, $url)
+                });
+
+            if let Err(e) = result {
+                eprintln!("Failed to write to {}: {}", $path, e);
+            }
         }
     }};
 }
+
+
 
 pub const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
 
@@ -215,7 +250,7 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
                 };
 
                 if should_include {
-                    // add to later returned vec of links
+                    write_url!("scraped_links/scrape_page_log.txt", &parsed_url);
                     found_urls.insert(parsed_url);
                 } else {
                     debug!("Skipped foreign host link: {}", parsed_url);
@@ -230,6 +265,7 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
     // }
 
     info!("Found {} urls on page {}", found_urls.len(), url);
+
     Ok(found_urls)
 }
 
