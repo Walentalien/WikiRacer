@@ -10,14 +10,33 @@ _| Macro      | Description                                    | Typical Use Cas
 | `warn!()`  | Something unexpected, but non-fatal            | Slow network, fallback in use       |
 | `error!()` | Fatal error occurred                           | Failed connection, file not found_   |
 
+## Build and Run
+This project uses [Cargo](https://doc.rust-lang.org/cargo/) for building and running.
+
+```bash
+cargo build
+cargo run -- --start-url <URL> --target-url <URL>
+```
+
+### CLI Options
+The available flags are:
+
+* `-s, --start-url <URL>` – starting Wikipedia page
+* `--target-url <URL>` – target Wikipedia page
+* `--max-urls <NUM>` – maximum pages to crawl (default: 1000)
+* `--max-depth <NUM>` – maximum crawl depth (default: 3)
+* `--thread-count <NUM>` – number of crawler threads (default: 4)
+* `-r, --request-delay <MS>` – delay between requests in milliseconds (default: 100)
+* `-o, --output-file <PATH>` – write the graph to a file
+* `-v, --verbose` – enable verbose logging
 
 TODO:
 1. Crawl function
 2. Data Structures to store scraped data
-Argument Parsing 
-Pretty Print Args
-GUI for this crawler
-start using anychow
+   Argument Parsing
+   Pretty Print Args
+   GUI for this crawler
+   start using anychow
 
 Creating graph visualization: https://doc.arcgis.com/en/insights/latest/create/link-chart.htm
 
@@ -54,12 +73,13 @@ Add examples for common use cases
 Implement better progress reporting and user feedback
 Here's a specific implementation plan to achieve these improvements:
 
-# Contribution GuideLine
+# Contribution Guideline
 Open for Contribution
 Looking for help with:
 - GUI Application
 - Path Finding/Link Processing Algorithm Improvement
-- Visualization of graph/ of graph creation (process)
-- Adding relevance evaluation to make the process quicker
-- Caching/Caching logic 
-- 
+- Visualization of graph creation process
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

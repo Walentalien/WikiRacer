@@ -8,7 +8,7 @@ pub struct Config {
     /// Starting Wikipedia URL
     #[arg(short, long)]
     pub start_url: String,
-
+    //TODO: Stop Crawling when this link is found
     /// Target Wikipedia URL
     #[arg(long)]
     pub target_url: String,

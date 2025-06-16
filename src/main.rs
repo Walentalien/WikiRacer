@@ -37,7 +37,8 @@ async fn main() -> Result<()> {
             .with_max_urls(cfg.max_urls)
             .with_max_depth(cfg.max_depth)
             .with_thread_count(cfg.thread_count)
-            .with_request_delay(cfg.request_delay),
+            .with_request_delay(cfg.request_delay)
+            .with_target_url(target_url.clone()),
     );
 
     let state = Arc::new(crawler::CrawlerState::new(start_url.clone()));

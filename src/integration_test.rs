@@ -36,7 +36,7 @@ mod integration_tests {
         }
 
         // Find shortest path
-        let path = crate::pathfinder::find_shortest_path(&start_url, &target_url, &graph);
+        let path = crate::pathfinder::find_shortest_path_bfs(&start_url, &target_url, &graph);
 
         match path {
             Some(path) => {

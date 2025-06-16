@@ -1,7 +1,7 @@
 use std::collections::{VecDeque, HashMap, HashSet};
 use std::fs;
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool} ;
 use std::time::Duration;
 use log2::{debug, info, trace};
 use url::Url;
@@ -25,6 +25,8 @@ pub struct CrawlerState {
     /// Graph Structure to visualize the result later
     /// TODO: Create visualization
     pub url_relationships: RwLock<HashMap<Url, Vec<Url>>>, // parent -> children
+    /// Indicator that target link has been found
+    pub target_found: AtomicBool,
 }
 
 impl CrawlerState {
@@ -37,6 +39,7 @@ impl CrawlerState {
             link_to_crawl_queue: RwLock::new(queue),
             visited_urls: RwLock::new(std::collections::HashSet::new()),
             url_relationships: RwLock::new(HashMap::new()),
+            target_found: AtomicBool::new(false),
         }
     }
 }
@@ -61,6 +64,7 @@ pub struct CrawlerConfig {
     pub max_retries: usize,
     /// timeout for each request in seconds
     pub request_timeout_sec: u64,
+    pub target_url: Option<Url>,
 }
 
 impl CrawlerConfig {
@@ -74,6 +78,7 @@ impl CrawlerConfig {
             request_delay_ms: 100,
             max_retries: 3,
             request_timeout_sec: LINK_REQUEST_TIMEOUT_SEC,
+            target_url: None,
         }
     }
 
@@ -102,6 +107,10 @@ impl CrawlerConfig {
     pub fn with_request_delay(mut self, delay_ms: u64) -> Self {
         self.request_delay_ms = delay_ms;
         self
+    }
+    pub fn  with_target_url(mut self, url: Url) -> Self{
+    self.target_url = Some(url);
+    self
     }
 }
 
@@ -137,6 +146,7 @@ pub(crate) fn construct_url(path: &str, root_url: Url) -> Result<Url, url::Parse
 }
 
 /// Reads one link from `link_to_crawl_queue` and scrapes all links from there to the end of that queue
+/// Returns: All found links on the page
 pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Result<Vec<Url>> {
     trace!("Scraping page: {}", url);
 
@@ -198,6 +208,10 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
             info!("Worker {} started", worker_id);
 
             loop {
+                if state.target_found.load(Ordering::SeqCst){
+                    info!("Worker {}: Target has been found. Exiting...", worker_id);
+                    break;
+                }
                 let next_item = {
                     let mut queue = state.link_to_crawl_queue.write().unwrap();
                     queue.pop_front()
@@ -237,6 +251,12 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                             }
 
                             {
+
+                                if let Some(target) = &config.target_url {
+                                    if found_urls.iter().any(|u| u == target) {
+                                        state.target_found.store(true, Ordering::SeqCst);
+                                    }
+                                }
                                 let mut queue = state.link_to_crawl_queue.write().unwrap();
                                 for found_url in found_urls {
                                     queue.push_back((found_url, depth + 1));
@@ -414,8 +434,17 @@ mod tests {
     async fn test_scrape_empty_page() -> Result<(), Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
         //let url = Url::parse("https://example.com/empty")?;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 2 };
-
+        let config: CrawlerConfig = CrawlerConfig {
+            starting_url: Url::parse("https://localhost")?,
+            scraping_foreign_hosts: false,
+            max_urls: 0,
+            max_depth: 0,
+            thread_count: 0,
+            request_delay_ms: 0,
+            max_retries: 0,
+            request_timeout_sec: 2,
+            target_url: None,
+        };
 
         let mock_server = wiremock::MockServer::start().await;
         Mock::given(method("GET"))
@@ -437,8 +466,17 @@ mod tests {
 
         let client = reqwest::Client::new();
         let mock_server = MockServer::start().await;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 2 };
-
+        let config: CrawlerConfig = CrawlerConfig {
+            starting_url: Url::parse("https://localhost")?,
+            scraping_foreign_hosts: false,
+            max_urls: 0,
+            max_depth: 0,
+            thread_count: 0,
+            request_delay_ms: 0,
+            max_retries: 0,
+            request_timeout_sec: 2,
+            target_url: None,
+        };
         // Setup mock HTML page
         Mock::given(method("GET"))
             .and(path("/with-links"))
@@ -471,7 +509,17 @@ mod tests {
     async fn test_scrape_page_404() -> Result<(), Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
         let url = Url::parse("https://example.com/not-found")?;
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 2 };
+        let config: CrawlerConfig = CrawlerConfig {
+            starting_url: Url::parse("https://localhost")?,
+            scraping_foreign_hosts: false,
+            max_urls: 0,
+            max_depth: 0,
+            thread_count: 0,
+            request_delay_ms: 0,
+            max_retries: 0,
+            request_timeout_sec: 2,
+            target_url: None,
+        };
         let mock_server = wiremock::MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/not-found"))
@@ -487,7 +535,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_scrape_page_timeout() -> Result<(), Box<dyn std::error::Error>> {
-        let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 0 };
+        //let config:CrawlerConfig = CrawlerConfig { starting_url: Url::parse("https://localhost")?, scraping_foreign_hosts: false, max_urls: 0, max_depth: 0, thread_count: 0, request_delay_ms: 0, max_retries: 0, request_timeout_sec: 0 };
+        let config: CrawlerConfig = CrawlerConfig {
+            starting_url: Url::parse("https://localhost")?,
+            scraping_foreign_hosts: false,
+            max_urls: 0,
+            max_depth: 0,
+            thread_count: 0,
+            request_delay_ms: 0,
+            max_retries: 0,
+            request_timeout_sec: 2,
+            target_url: None,
+        };
         let client = reqwest::Client::new();
         let url = Url::parse("https://example.com/timeout")?;
 
@@ -516,6 +575,7 @@ mod tests {
             request_delay_ms: 0,
             max_retries: 0,
             request_timeout_sec: 5,
+            target_url: None,
         })
     }
 
