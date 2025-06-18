@@ -100,20 +100,15 @@ mod tests {
     }
 
     fn setup_graph() -> HashMap<Url, HashSet<Url>> {
+        use std::collections::{HashMap, HashSet};
         let a = url("/a");
         let b = url("/b");
         let c = url("/c");
         let d = url("/d");
         let e = url("/e");
 
-        // HashMap::from([
-        //     (a.clone(), vec![b.clone(), c.clone()]),
-        //     (b.clone(), vec![d.clone()]),
-        //     (c.clone(), vec![d.clone()]),
-        //     (d.clone(), vec![e.clone()]),
-        //     (e.clone(), vec![]),
-        // ])
-        use std::collections::{HashMap, HashSet};
+
+
 
         HashMap::from([
             (a.clone(), vec![b.clone(), c.clone()].into_iter().collect()),

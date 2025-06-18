@@ -14,15 +14,15 @@ pub struct Config {
     pub target_url: String,
 
     /// Maximum number of URLs to crawl
-    #[arg( long, default_value = "1000")]
+    #[arg( long, default_value = "10000")]
     pub max_urls: usize,
 
     /// Maximum depth to crawl
-    #[arg( long, default_value = "3")]
+    #[arg( long, default_value = "5")]
     pub max_depth: usize,
 
     /// Number of threads to use for crawling
-    #[arg( long, default_value = "4")]
+    #[arg( long, default_value = "8")]
     pub thread_count: usize,
 
     /// Delay between requests in milliseconds

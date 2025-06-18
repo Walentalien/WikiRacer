@@ -2,3 +2,4 @@
 .idea
 log/*
 scraped_links/*.txt
+*.txt

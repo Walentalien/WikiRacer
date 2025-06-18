@@ -20,7 +20,7 @@ I want to see if i'm getting any duplicates
 macro_rules! write_url {
     // Case: HashSet or iterable
     ($path:expr, [$($url:expr),+ $(,)?]) => {{
-        #[cfg(debug_assertions)]
+        #[cfg(debug_assertions)] // doesnt run in release
         {
             use std::fs::OpenOptions;
             use std::io::Write;
@@ -128,6 +128,7 @@ pub struct CrawlerConfig {
     pub max_retries: usize,
     /// timeout for each request in seconds
     pub request_timeout_sec: u64,
+    /// the url we are looking for
     pub target_url: Option<Url>,
 }
 
@@ -178,8 +179,6 @@ impl CrawlerConfig {
     }
 }
 
-
-
 type CrawlerConfigRef = Arc<CrawlerConfig>;
 
 
@@ -206,7 +205,7 @@ pub(crate) fn construct_url(path: &str, root_url: Url) -> Result<Url, url::Parse
 
     //trace!("Constructed link URL: {}", url);
 
-    write_url!("scraped_links/log.txt", &url);
+    write_url!("log.txt", &url);
     Ok(url)
 
 }
@@ -250,7 +249,7 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
                 };
 
                 if should_include {
-                    write_url!("scraped_links/scrape_page_log.txt", &parsed_url);
+                    write_url!("scrape_page_log.txt", &parsed_url);
                     found_urls.insert(parsed_url);
                 } else {
                     debug!("Skipped foreign host link: {}", parsed_url);
