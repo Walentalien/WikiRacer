@@ -7,7 +7,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_wikipedia_path_finding() -> Result<(), Box<dyn std::error::Error>> {
         let start_url = Url::parse("https://en.wikipedia.org/wiki/Matter")?;
-        let target_url = Url::parse("https://en.wikipedia.org/wiki/Grand_Unified_Theory")?;
+        let target_url = Url::parse("https://en.wikipedia.org/wiki/Chemistry")?;
 
         let config = Arc::new(
             crate::crawler::CrawlerConfig::new(start_url.clone())
@@ -67,6 +67,4 @@ mod integration_tests {
 
         Ok(())
     }
-
-
 }
