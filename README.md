@@ -1,18 +1,6 @@
 # WikiRacer
 Find Shortest Path Between Two Links on Wikipedia
-
-
-_| Macro      | Description                                    | Typical Use Case                    |
-| ---------- | ---------------------------------------------- | ----------------------------------- |
-| `trace!()` | Very detailed info (e.g., every function call) | Debugging low-level flows           |
-| `debug!()` | General debugging info                         | Values of variables, flow checks    |
-| `info!()`  | High-level state/info                          | Starting app, finished task, status |
-| `warn!()`  | Something unexpected, but non-fatal            | Slow network, fallback in use       |
-| `error!()` | Fatal error occurred                           | Failed connection, file not found_   |
-
-## Build and Run
-This project uses [Cargo](https://doc.rust-lang.org/cargo/) for building and running.
-
+## RUNNING
 ```bash
 cargo build
 cargo run -- --start-url <URL> --target-url <URL>
@@ -31,12 +19,10 @@ The available flags are:
 * `-v, --verbose` – enable verbose logging
 
 TODO:
-1.   Argument Parsing
-2.   Pretty Print Args
-3.   GUI for this crawler
-4.   start using anychow
+1. FIX CONCURENCY ISSUES
+1. GUI for this crawler
 
-Creating graph visualization: https://doc.arcgis.com/en/insights/latest/create/link-chart.htm
+2. Creating graph visualization: https://doc.arcgis.com/en/insights/latest/create/link-chart.htm
 
 
 Performance Optimizations:
@@ -79,5 +65,4 @@ Looking for help with:
 - **Visualization** of graph creation process
 
 ## License
-
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

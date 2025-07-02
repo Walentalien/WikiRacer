@@ -13,7 +13,6 @@ tokio = {version =  "1.45.1", features = ["full"] }
 wiremock = "0.6.3"
 serde = { version = "1.0.219", features = ["derive"] }
 clap = { version = "4.5.38", features = ["derive"] }
-blake3 = "1.8.2"
 #Dependencies for visualization:
 eframe = "0.26"
 egui = "0.26"

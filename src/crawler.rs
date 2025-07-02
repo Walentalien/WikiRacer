@@ -85,7 +85,7 @@ pub struct CrawlerState {
     /// Links to crawl in queue
     pub link_to_crawl_queue: RwLock<VecDeque<(Url, usize)>>, // (url, depth)
     /// Set of visited URL to prevent cycles in graph
-    pub visited_urls: RwLock<std::collections::HashSet<Url>>,
+    pub visited_urls: RwLock<HashSet<Url>>,
     /// Graph Structure to visualize the result later
     /// TODO: Create visualization
     pub url_relationships: RwLock<HashMap<Url, HashSet<Url>>>, // parent -> children
@@ -96,12 +96,12 @@ pub struct CrawlerState {
 impl CrawlerState {
     pub fn new(starting_url: Url) -> Self {
         let mut queue = VecDeque::new();
-        queue.push_back((starting_url, 0)); // Start at depth 0
+        queue.push_back((starting_url, 0)); // Starts at depth 0
 
         Self {
             links_crawled_count: AtomicUsize::new(0),
             link_to_crawl_queue: RwLock::new(queue),
-            visited_urls: RwLock::new(std::collections::HashSet::new()),
+            visited_urls: RwLock::new(HashSet::new()),
             url_relationships: RwLock::new(HashMap::new()),
             target_found: AtomicBool::new(false),
         }
@@ -203,8 +203,6 @@ pub(crate) fn construct_url(path: &str, root_url: Url) -> Result<Url, url::Parse
     // Remove fragment for consistent URLs
     url.set_fragment(None);
 
-    //trace!("Constructed link URL: {}", url);
-
     write_url!("log.txt", &url);
     Ok(url)
 
@@ -213,8 +211,6 @@ pub(crate) fn construct_url(path: &str, root_url: Url) -> Result<Url, url::Parse
 /// Reads one link from `link_to_crawl_queue` and scrapes all links from there to the end of that queue
 /// Returns: All found links on the page
 pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> Result<HashSet<Url>> {
-    trace!("Scraping page: {}", url);
-
     let response = client
         .get(url.clone())
         .timeout(Duration::from_secs(config.request_timeout_sec))
