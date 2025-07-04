@@ -17,6 +17,7 @@ The available flags are:
 * `-r, --request-delay <MS>` – delay between requests in milliseconds (default: 100)
 * `-o, --output-file <PATH>` – write the graph to a file
 * `-v, --verbose` – enable verbose logging
+* `--log-level <LEVEL>` – set log level (trace, debug, info, warn, error)
 
 TODO:
 1. FIX CONCURENCY ISSUES

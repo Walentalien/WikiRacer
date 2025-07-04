@@ -1,7 +1,6 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-
 #[derive(Parser, Debug, Serialize, Deserialize)]
 #[command(author, version, about, long_about = None)]
 pub struct Config {

@@ -8,6 +8,8 @@ use anyhow::Result;
 use url::Url;
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Indicates start time of a project, lazily initialized
 pub static START_TIME: once_cell::sync::Lazy<Instant> = once_cell::sync::Lazy::new(Instant::now);
 
 #[tokio::main]

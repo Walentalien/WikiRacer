@@ -1,80 +1,15 @@
 use std::collections::{VecDeque, HashMap, HashSet};
-use std::fs;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool} ;
 use std::time::Duration;
-use log2::{debug, info, trace};
+use log2::*;
 use url::Url;
 use reqwest::Client;
 use anyhow::{Result, anyhow};
 use scraper::{Html, Selector};
-use serde::Serialize;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
-
-/*
-Macro for debugging purposes that writes links to the file;
-I want to see if i'm getting any duplicates
- */
-#[macro_export]
-macro_rules! write_url {
-    // Case: HashSet or iterable
-    ($path:expr, [$($url:expr),+ $(,)?]) => {{
-        #[cfg(debug_assertions)] // doesnt run in release
-        {
-            use std::fs::OpenOptions;
-            use std::io::Write;
-            use std::time::Duration;
-
-            let elapsed = $crate::START_TIME.elapsed();
-            let minutes = elapsed.as_secs() / 60;
-            let seconds = elapsed.as_secs() % 60;
-
-            let result = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open($path)
-                .and_then(|mut file| {
-                    $(
-                        writeln!(file, "[{:02}:{:02}] {}", minutes, seconds, $url)?;
-                    )+
-                    Ok(())
-                });
-
-            if let Err(e) = result {
-                eprintln!("Failed to write to {}: {}", $path, e);
-            }
-        }
-    }};
-
-    // Case: single Url
-    ($path:expr, $url:expr) => {{
-        #[cfg(debug_assertions)]
-        {
-            use std::fs::OpenOptions;
-            use std::io::Write;
-            use std::time::Duration;
-
-            let elapsed = $crate::START_TIME.elapsed();
-            let minutes = elapsed.as_secs() / 60;
-            let seconds = elapsed.as_secs() % 60;
-
-            let result = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open($path)
-                .and_then(|mut file| {
-                    writeln!(file, "[{:02}:{:02}] {}", minutes, seconds, $url)
-                });
-
-            if let Err(e) = result {
-                eprintln!("Failed to write to {}: {}", $path, e);
-            }
-        }
-    }};
-}
-
-
+use tokio::sync::RwLock;
 
 pub const LINK_REQUEST_TIMEOUT_SEC: u64 = 2;
 
@@ -87,7 +22,6 @@ pub struct CrawlerState {
     /// Set of visited URL to prevent cycles in graph
     pub visited_urls: RwLock<HashSet<Url>>,
     /// Graph Structure to visualize the result later
-    /// TODO: Create visualization
     pub url_relationships: RwLock<HashMap<Url, HashSet<Url>>>, // parent -> children
     /// Indicator that target link has been found
     pub target_found: AtomicBool,
@@ -203,7 +137,6 @@ pub(crate) fn construct_url(path: &str, root_url: Url) -> Result<Url, url::Parse
     // Remove fragment for consistent URLs
     url.set_fragment(None);
 
-    write_url!("log.txt", &url);
     Ok(url)
 
 }
@@ -245,7 +178,6 @@ pub async fn scrape_page(url: Url, client: &Client, config: &CrawlerConfig) -> R
                 };
 
                 if should_include {
-                    write_url!("scrape_page_log.txt", &parsed_url);
                     found_urls.insert(parsed_url);
                 } else {
                     debug!("Skipped foreign host link: {}", parsed_url);
@@ -283,7 +215,7 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                     break;
                 }
                 let next_item = {
-                    let mut queue = state.link_to_crawl_queue.write().unwrap();
+                    let mut queue = state.link_to_crawl_queue.write().await;
                     queue.pop_front()
                 };
 
@@ -297,7 +229,7 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                     }
 
                     {
-                        let mut visited = state.visited_urls.write().unwrap();
+                        let mut visited = state.visited_urls.write().await;
                         if visited.contains(&url) {
                             active_workers.fetch_sub(1, Ordering::SeqCst);
                             continue;
@@ -316,7 +248,7 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                     match scrape_page(url.clone(), &client, &config).await {
                         Ok(found_urls) => {
                             {
-                                let mut relationships = state.url_relationships.write().unwrap();
+                                let mut relationships = state.url_relationships.write().await;
                                 relationships.insert(url.clone(), found_urls.clone());
                             }
 
@@ -327,7 +259,7 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                                         state.target_found.store(true, Ordering::SeqCst);
                                     }
                                 }
-                                let mut queue = state.link_to_crawl_queue.write().unwrap();
+                                let mut queue = state.link_to_crawl_queue.write().await;
                                 for found_url in found_urls {
                                     queue.push_back((found_url, depth + 1));
                                 }
@@ -349,7 +281,7 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
                     sleep(Duration::from_millis(200)).await;
 
                     let queue_empty = {
-                        let queue = state.link_to_crawl_queue.read().unwrap();
+                        let queue = state.link_to_crawl_queue.read().await;
                         queue.is_empty()
                     };
 
@@ -377,7 +309,7 @@ pub async fn crawl(crawler_state_ref: CrawlerStateRef, crawler_cfg_ref: CrawlerC
 
 /// Build a graph from the crawled state for pathfinding
 pub fn build_graph_from_state(state: &CrawlerStateRef) -> HashMap<Url, HashSet<Url>> {
-    let relationships = state.url_relationships.read().unwrap();
+    let relationships = state.url_relationships.blocking_read();
     relationships.clone()
 }
 
@@ -668,7 +600,7 @@ mod tests {
 
         crawl(state.clone(), config.clone()).await.unwrap();
 
-        let graph = state.url_relationships.read().unwrap();
+        let graph = state.url_relationships.read().await;
         assert_eq!(graph.len(), 3); // Only root has children
         // https://localhost/start :  https://localhost/a https://localhost/b <- what is expected to be in graph
         // Root has two children
@@ -704,11 +636,11 @@ async fn test_max_depth_respected() {
     let state = test_state(url.clone());
     crawl(state.clone(), config).await.unwrap();
 
-    let visited = state.visited_urls.read().unwrap();
+    let visited = state.visited_urls.read().await;
     assert!(visited.contains(&url));
     assert!(!visited.iter().any(|u| u.path().contains("child1"))); // Not crawled
 
-    let graph = state.url_relationships.read().unwrap();
+    let graph = state.url_relationships.read().await;
     let children = graph.get(&url).unwrap();
     assert!(children.iter().any(|u| u.path().contains("child1"))); // Discovered, but not crawled
 }
@@ -773,7 +705,7 @@ async fn test_max_depth_respected() {
 
         crawl(state.clone(), config).await.unwrap();
 
-        let graph = state.url_relationships.read().unwrap();
+        let graph = state.url_relationships.read().await;
         assert!(graph.get(&url).unwrap().iter().all(|u| u.domain() != Some("google.com")));
     }
 
@@ -791,10 +723,10 @@ async fn test_max_depth_respected() {
 
         crawl(state.clone(), config).await.unwrap();
 
-        let visited = state.visited_urls.read().unwrap();
+        let visited = state.visited_urls.read().await;
         assert!(visited.contains(&url));
 
-        let graph = state.url_relationships.read().unwrap();
+        let graph = state.url_relationships.read().await;
         assert!(graph.get(&url).is_none()); // No children on error
     }
     // tests for `scrape page` end here
