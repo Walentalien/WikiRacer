@@ -15,7 +15,8 @@ pub static START_TIME: once_cell::sync::Lazy<Instant> = once_cell::sync::Lazy::n
 #[tokio::main]
 async fn main() -> Result<()> {
     let _ = *START_TIME;
-    // Init logger
+    let cfg = config::Config::new();
+    cfg.validate()?;
     let _log2 = //open("log/log.txt")
         //.tee(true)
     stdout()
@@ -23,21 +24,11 @@ async fn main() -> Result<()> {
         .module_with_line(true) // include line number from module
         .module_filter(|module| module.starts_with("WikiRacer")) // include only modules having this pattern
         .compress(false) // compress output
-        .level("trace") // level of logging (trace -
+        .level(cfg.log_level.to_string()) // level of logging (trace -
         .start();
-    info!("Logging Started");
-
-    // Load CLI config
-    let cfg = config::Config::new();
-    if cfg.verbose {
-        info!("Loaded config: {:?}", cfg);
-    }
-    cfg.validate()?;
 
     let start_url = Url::parse(&cfg.start_url)?;
-    debug!("start_url: {:?}", start_url);
     let target_url = Url::parse(&cfg.target_url)?;
-    debug!("target_url: {:?}", target_url);
 
     let crawler_config = Arc::new(
         crawler::CrawlerConfig::new(start_url.clone())
@@ -50,17 +41,12 @@ async fn main() -> Result<()> {
 
     let state = Arc::new(crawler::CrawlerState::new(start_url.clone()));
 
-    debug!(
-        "Starting crawler with {} threads, max {} URLs, max depth {}",
-        crawler_config.thread_count, crawler_config.max_urls, crawler_config.max_depth
-    );
     // state is cloned because it's accessed after and config is not
     match crawler::crawl(state.clone(), crawler_config).await {
         Ok(_) => {
-            // Ordering Relaxes only ensures that operation is atomic nithing else
+            // Ordering Relaxes only ensures that operation is atomic nothing else
             let final_count = state.links_crawled_count.load(std::sync::atomic::Ordering::Relaxed);
             debug!("Crawling completed. Total links found: {}", final_count);
-            // TODO: Add statistics about du
             let graph = crawler::build_graph_from_state(&state);
 
             match pathfinder::find_shortest_path_bfs(&start_url, &target_url, &graph) {
@@ -76,7 +62,7 @@ async fn main() -> Result<()> {
 
             if let Some(path) = cfg.output_file {
                 std::fs::write(&path, format!("{:?}", graph))?;
-                info!("Graph written to {:?}", path);
+                info!("Path written to {:?}", path);
             }
         }
         Err(e) => {

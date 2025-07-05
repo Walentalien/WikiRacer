@@ -23,8 +23,6 @@ TODO:
 1. FIX CONCURENCY ISSUES
 2. GUI for this crawler
 3. Creating graph visualization: https://doc.arcgis.com/en/insights/latest/create/link-chart.htm
-4. Fix RwLock
-5. 
 
 Performance Optimizations:
 - Implement parallel crawling more efficiently using a work-stealing thread pool
