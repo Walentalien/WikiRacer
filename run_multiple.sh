@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Build the project once in release mode so subsequent runs are fast
-#cargo build --release
+# cargo build --release
 
 BIN="$(pwd)/target/release/WikiRacer"
 LOG_DIR="run_logs"

@@ -2,6 +2,7 @@ mod crawler;
 mod pathfinder;
 mod integration_test;
 mod config;
+mod crawler;
 
 use log2::*;
 use anyhow::Result;
