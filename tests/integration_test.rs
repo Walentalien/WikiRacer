@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use url::Url;
-use WikiRacer::{crawler, pathfinder};
-
+use WikiRacer::*;
+mod crawler;
+use crate::crawler::*;
 #[tokio::test]
 async fn test_wikipedia_path_finding() -> Result<(), Box<dyn std::error::Error>> {
     let start_url = Url::parse("https://en.wikipedia.org/wiki/Matter")?;

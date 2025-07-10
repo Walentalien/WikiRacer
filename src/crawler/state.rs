@@ -36,7 +36,11 @@ impl CrawlerState {
 pub type CrawlerStateRef = Arc<CrawlerState>;
 
 /// Build a graph from the crawled state for pathfinding
-pub fn build_graph_from_state(state: &CrawlerStateRef) -> HashMap<Url, HashSet<Url>> {
-    let relationships = state.url_relationships.blocking_read();
+// changed signature to async
+pub async fn build_graph_from_state(
+    state: &CrawlerStateRef,
+) -> HashMap<Url, HashSet<Url>> {
+    // this is nonblocking and can be called on a runtime thread
+    let relationships = state.url_relationships.read().await;
     relationships.clone()
 }
